@@ -33,7 +33,7 @@
 #include "Render.h" // for struct Particle
 #include "ExtensionHelper.h" // Intel extensions
 
-const float Compute::ParticleSpread = 400.0f;
+const float Compute::ParticleSpread = PARTICLE_SPREAD;
 
 enum ComputeRootParameters : UINT32
 {
