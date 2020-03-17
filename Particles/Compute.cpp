@@ -207,7 +207,6 @@ Compute::Compute(UINT in_numParticles,
     m_frameFenceValues{}
 {
     m_bufferIndex = 0;
-    m_pTimer = 0;
     m_usingIntelCommandQueueExtension = in_useIntelCommandQueueExtension;
     m_fenceValue = 0;
 
@@ -231,7 +230,6 @@ Compute::~Compute()
 {
     WaitForGpu();
     delete m_pExtensionHelper;
-    delete m_pTimer;
 
     CloseHandle(m_sharedHandles.m_heap);
     CloseHandle(m_sharedHandles.m_fence);
@@ -347,7 +345,7 @@ void Compute::SetAdapter(ComPtr<IDXGIAdapter1> in_adapter)
 {
     m_adapter = in_adapter;
 
-    CreateBestDevice(m_adapter.Get(), m_device);
+    CreateDevice(m_adapter.Get(), m_device);
 
     m_pExtensionHelper = new ExtensionHelper(m_device.Get());
     m_usingIntelCommandQueueExtension = m_usingIntelCommandQueueExtension && m_pExtensionHelper->GetEnabled();

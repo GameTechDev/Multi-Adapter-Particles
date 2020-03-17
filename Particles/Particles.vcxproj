@@ -96,6 +96,7 @@
     <ClInclude Include="..\include\D3D12GpuTimer.h" />
     <ClInclude Include="..\include\ExtensionHelper.h" />
     <ClInclude Include="..\include\Timer.h" />
+    <ClInclude Include="AdapterShared.h" />
     <ClInclude Include="Compute.h" />
     <ClInclude Include="defines.h" />
     <ClInclude Include="Particles.h" />

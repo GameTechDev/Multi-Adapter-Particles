@@ -185,7 +185,7 @@ Render::Render(HWND in_hwnd, UINT in_numParticles,
     m_particleSize = 0;
     m_particleIntensity = 0;
 
-    CreateBestDevice(in_adapter.Get(), m_device);
+    CreateDevice(in_adapter.Get(), m_device);
 
     // attempt to enable Intel extensions
     m_pExtensionHelper = new ExtensionHelper(m_device.Get());
@@ -218,7 +218,6 @@ Render::~Render()
 
     CloseHandle(m_sharedFenceHandle);
 
-    delete m_pTimer;
     delete m_pExtensionHelper;
 }
 

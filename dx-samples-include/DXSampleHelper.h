@@ -188,18 +188,3 @@ void ResetUniquePtrArray(T* uniquePtrArray)
         i.reset();
     }
 }
-
-inline void CreateBestDevice(IDXGIAdapter1* in_pAdapter, Microsoft::WRL::ComPtr<ID3D12Device>& in_device)
-{
-    const D3D_FEATURE_LEVEL testLevel = D3D_FEATURE_LEVEL_11_0;
-    ThrowIfFailed(D3D12CreateDevice(in_pAdapter, testLevel, IID_PPV_ARGS(&in_device)));
-
-    D3D_FEATURE_LEVEL features[] = { D3D_FEATURE_LEVEL_12_1, D3D_FEATURE_LEVEL_12_0, D3D_FEATURE_LEVEL_11_0 };
-    D3D12_FEATURE_DATA_FEATURE_LEVELS levels = { _countof(features), features };
-    in_device->CheckFeatureSupport(D3D12_FEATURE_FEATURE_LEVELS, &levels, sizeof(levels));
-
-    if (testLevel != levels.MaxSupportedFeatureLevel)
-    {
-        ThrowIfFailed(D3D12CreateDevice(in_pAdapter, levels.MaxSupportedFeatureLevel, IID_PPV_ARGS(&in_device)));
-    }
-}

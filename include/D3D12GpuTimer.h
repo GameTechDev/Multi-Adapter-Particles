@@ -50,7 +50,7 @@ public:
     void ResolveAllTimers(ID3D12GraphicsCommandList* in_pCommandList);
 
     typedef std::vector<std::pair<float, std::string>> TimeArray;
-    TimeArray& GetTimes() { return m_times; }
+    const TimeArray& GetTimes() const { return m_times; }
 private:
     std::uint32_t m_numTimers;   // how many we expose. we need double to record begin + end
     std::uint32_t m_totalTimers;

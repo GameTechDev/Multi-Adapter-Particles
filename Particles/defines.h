@@ -31,6 +31,8 @@
 #define X_STRINGIFY(x) #x
 #define STRINGIFY( x ) X_STRINGIFY(x)
 
+#define MINIMUM_D3D_FEATURE_LEVEL D3D_FEATURE_LEVEL_12_0
+
 // compute shader block size
 #define BLOCK_SIZE 64
 // UI or no?

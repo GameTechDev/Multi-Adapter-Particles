@@ -25,18 +25,9 @@
 //*********************************************************
 #pragma once
 
-#include <wrl.h>
-#include <dxgi1_6.h>
-#include <d3d12.h>
-#include <DirectXMath.h>
+#include "AdapterShared.h"
 
-#include "defines.h"
-#include "DXSampleHelper.h"
-#include "D3D12GpuTimer.h"
-
-using Microsoft::WRL::ComPtr;
-
-class Compute
+class Compute : public AdapterShared
 {
 public:
     Compute(UINT in_numParticles,
@@ -49,12 +40,8 @@ public:
     // input is fence value of other adapter. waits to overwrite shared buffer.
     void Simulate(int in_numActiveParticles, UINT64 in_sharedFenceValue);
 
-    auto& GetGpuTimes() { return m_pTimer->GetTimes(); }
-
-    bool GetUsingIntelCommandQueueExtension() const { return m_usingIntelCommandQueueExtension; }
-
     // changes extension setting only if different from current setting
-    void SetUseIntelCommandQueueExtension(bool in_desiredSetting);
+    void SetUseIntelCommandQueueExtension(bool in_desiredSetting) override;
 
     // provide cross-adapter shared handles to copy particle buffers to
     struct SharedHandles
@@ -83,7 +70,6 @@ private:
     const UINT m_numParticles;
 
     class ExtensionHelper* m_pExtensionHelper;
-    bool m_usingIntelCommandQueueExtension;
 
     ComPtr<IDXGIAdapter1> m_adapter;
     ComPtr<ID3D12Device> m_device;
@@ -104,8 +90,6 @@ private:
     HANDLE m_fenceEvent;
 
     UINT m_bufferIndex;
-
-    D3D12GpuTimer* m_pTimer;
 
     ComPtr<ID3D12Heap> m_sharedHeap;
     ComPtr<ID3D12Resource> m_velocityBuffers[m_NUM_BUFFERS];

@@ -25,19 +25,12 @@
 //*********************************************************
 #pragma once
 
-#include <wrl.h>
-#include <dxgi1_6.h>
-#include <d3d12.h>
-#include <cinttypes>
-#include <DirectXMath.h>
-
-#include "defines.h"
-#include "DXSampleHelper.h"
+#include "AdapterShared.h"
 #include "SimpleCamera.h"
 
 #include "Compute.h" // for shared handles structure
 
-class Render
+class Render : public AdapterShared
 {
 public:
     Render(HWND in_hwnd, UINT in_numParticles,
@@ -52,7 +45,6 @@ public:
     // in_numParticlesCopied was added to experiment with stressing the PCI bus
     HANDLE Draw(int in_numActiveParticles, class Particles* in_pParticles, UINT64& inout_fenceValue,
         int in_numParticlesCopied);
-    auto& GetGpuTimes() { return m_pTimer->GetTimes(); }
 
     void SetParticleSize(float in_particleSize) { m_particleSize = in_particleSize; }
     void SetParticleIntensity(float in_particleIntensity) { m_particleIntensity = in_particleIntensity; }
@@ -66,9 +58,8 @@ public:
 
     //-----------------------------------------------------
     // Intel Command Queue Extension interfaces:
-    bool GetUsingIntelCommandQueueExtension() const { return m_usingIntelCommandQueueExtension; }
     // changes extension setting only if different from current setting
-    void SetUseIntelCommandQueueExtension(bool in_desiredSetting);
+    void SetUseIntelCommandQueueExtension(bool in_desiredSetting) override;
     bool GetSupportsIntelCommandQueueExtension() const;
     //-----------------------------------------------------
 
@@ -173,8 +164,6 @@ private:
 
     // returns a handle (or 0), so the calling function can WaitOn/Multiple/
     HANDLE MoveToNextFrame();
-
-    D3D12GpuTimer* m_pTimer;
 
     // copy command queue
     ComPtr<ID3D12CommandQueue> m_copyQueue;
