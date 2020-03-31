@@ -346,7 +346,6 @@ void Render::CreateSwapChain()
         UINT left = 0;
         UINT top = 0;
 
-        HRESULT foundOutput = 0;
         // take the first attached monitor
         m_adapter->EnumOutputs(0, &pOutput);
         if (pOutput)
@@ -367,8 +366,8 @@ void Render::CreateSwapChain()
     }
 
     ComPtr<IDXGISwapChain1> swapChain;
-    HRESULT hr = factory->CreateSwapChainForHwnd(m_commandQueue.Get(), m_hwnd,
-        &swapChainDesc, pFullScreenDesc, pOutput, &swapChain);
+    ThrowIfFailed(factory->CreateSwapChainForHwnd(m_commandQueue.Get(), m_hwnd,
+        &swapChainDesc, pFullScreenDesc, pOutput, &swapChain));
 
     m_viewport = CD3DX12_VIEWPORT(0.0f, 0.0f,
         static_cast<FLOAT>(swapChainDesc.Width), static_cast<FLOAT>(swapChainDesc.Height));
