@@ -64,7 +64,7 @@ public:
     //-----------------------------------------------------
     // Intel Command Queue Extension interfaces:
     // changes extension setting only if different from current setting
-    void SetUseIntelCommandQueueExtension(bool in_desiredSetting) override;
+    virtual void SetUseIntelCommandQueueExtension(bool in_desiredSetting) override;
     bool GetSupportsIntelCommandQueueExtension() const;
     //-----------------------------------------------------
 

@@ -46,7 +46,7 @@ public:
     void Simulate(int in_numActiveParticles, UINT64 in_sharedFenceValue);
 
     // changes extension setting only if different from current setting
-    void SetUseIntelCommandQueueExtension(bool in_desiredSetting) override;
+    virtual void SetUseIntelCommandQueueExtension(bool in_desiredSetting) override;
 
     // provide cross-adapter shared handles to copy particle buffers to
     struct SharedHandles
