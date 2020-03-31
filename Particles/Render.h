@@ -84,7 +84,6 @@ private:
     const UINT m_numParticles;
 
     class ExtensionHelper* m_pExtensionHelper;
-    bool m_usingIntelCommandQueueExtension;
     HWND m_hwnd;
     ComPtr<IDXGIAdapter1> m_adapter;
     ComPtr<ID3D12Device> m_device;
