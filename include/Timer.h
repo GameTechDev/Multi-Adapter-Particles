@@ -38,8 +38,8 @@ public:
 	double GetTime() const;
 
     Timer();
-private:
 
+private:
     LARGE_INTEGER m_startTime;
     LARGE_INTEGER m_performanceFrequency;
     double m_oneOverTicksPerSecond;
@@ -49,6 +49,7 @@ private:
 //-----------------------------------------------------------------------------
 inline Timer::Timer()
 {
+    m_startTime.QuadPart = 0;
     QueryPerformanceFrequency(&m_performanceFrequency);
     m_oneOverTicksPerSecond = 1. / (double)m_performanceFrequency.QuadPart;
 }

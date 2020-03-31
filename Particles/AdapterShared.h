@@ -61,12 +61,14 @@ public:
 
     // returns if this adapter uses unified memory (system memory is treated as local adapter memory)
     bool GetIsUMA() const { return m_isUMA; }
-protected:
-    D3D12GpuTimer* m_pTimer;
 
+protected:
     // create a device with the highest feature support
     void CreateDevice(IDXGIAdapter1* in_pAdapter, Microsoft::WRL::ComPtr<ID3D12Device>& in_device);
+
+    D3D12GpuTimer* m_pTimer;
     bool m_usingIntelCommandQueueExtension;
+
 private:
     bool m_isUMA;
 };
@@ -74,8 +76,10 @@ private:
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 inline AdapterShared::AdapterShared()
+    : m_pTimer(nullptr)
+    , m_usingIntelCommandQueueExtension(false)
+    , m_isUMA(false)
 {
-    m_pTimer = 0;
 }
 
 //-----------------------------------------------------------------------------
