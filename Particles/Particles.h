@@ -45,7 +45,7 @@ using Microsoft::WRL::ComPtr;
 class Particles
 {
 public:
-    Particles(HWND in_hwnd);
+    explicit Particles(HWND in_hwnd);
     ~Particles();
 
     void Draw();

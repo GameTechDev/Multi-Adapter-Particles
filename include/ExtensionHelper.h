@@ -34,7 +34,7 @@
 class ExtensionHelper
 {
 public:
-    ExtensionHelper(ID3D12Device* in_pDevice);
+    explicit ExtensionHelper(ID3D12Device* in_pDevice);
     ~ExtensionHelper();
 
     ID3D12CommandQueue* CreateCommandQueue(D3D12_COMMAND_QUEUE_DESC in_queueDesc);
