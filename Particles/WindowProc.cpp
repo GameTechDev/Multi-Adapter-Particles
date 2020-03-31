@@ -23,11 +23,9 @@
 // DEALINGS IN THE SOFTWARE.
 //
 //*********************************************************
-#include <DirectXMath.h>
 
 #include "WindowProc.h"
 
-using namespace DirectX;
 
 InputState WindowProc::m_inputState;
 

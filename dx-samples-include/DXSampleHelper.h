@@ -10,6 +10,7 @@
 //*********************************************************
 
 #pragma once
+
 #include <stdexcept>
 #include <wrl.h>
 

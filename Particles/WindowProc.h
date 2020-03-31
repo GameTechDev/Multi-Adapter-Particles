@@ -34,7 +34,7 @@
 #endif
 
 #include <Windows.h>
-#include <cinttypes>
+#include <cstdint>
 
 struct InputState
 {

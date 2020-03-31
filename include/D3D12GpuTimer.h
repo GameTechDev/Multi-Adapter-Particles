@@ -25,13 +25,15 @@
 //*********************************************************
 #pragma once
 
-#include <cstdint>
 #include <d3d12.h>
-#include <d3dx12.h>
 #include <wrl.h>
+
+#include <cstdint>
 #include <vector>
 #include <string>
+#include <utility>
 
+#include "d3dx12.h"
 #include "DXSampleHelper.h"
 
 class D3D12GpuTimer

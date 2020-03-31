@@ -25,13 +25,13 @@
 //*********************************************************
 #pragma once
 
-#include <wrl.h>
+#include "WindowProc.h"
+#include "defines.h"
+
 #include <dxgi1_6.h>
 #include <d3d12.h>
-#include <DirectXMath.h>
+#include <wrl.h>
 
-#include "defines.h"
-#include "DXSampleHelper.h"
 #include "D3D12GpuTimer.h"
 
 using Microsoft::WRL::ComPtr;

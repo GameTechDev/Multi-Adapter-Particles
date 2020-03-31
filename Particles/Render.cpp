@@ -24,16 +24,13 @@
 //
 //*********************************************************
 
-#include <D3Dcompiler.h>
-#include <D3Dcompiler.h>
 #include <sstream>
+#include <D3Dcompiler.h>
 
 #include "Render.h"
 #include "Particles.h"
-#include "D3D12GpuTimer.h"
 #include "ExtensionHelper.h" // Intel extensions
 
-using namespace DirectX;
 
 #define USE_LATENCY_WAITABLE 1
 

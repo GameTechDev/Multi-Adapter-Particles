@@ -26,8 +26,8 @@
 #pragma once
 
 #include "AdapterShared.h"
+#include <DirectXMath.h>
 #include "SimpleCamera.h"
-
 #include "Compute.h" // for shared handles structure
 
 class Render : public AdapterShared

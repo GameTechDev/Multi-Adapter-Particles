@@ -25,14 +25,20 @@
 //*********************************************************
 #pragma once
 
+#include "WindowProc.h"
+
 #include <wrl.h>
 #include <dxgi1_6.h>
+#include <d3d12.h>
+
+#include <cstdint>
 #include <vector>
 #include <string>
 
-#include "Render.h"
-#include "Compute.h"
 #include "Timer.h"
+
+class Render;
+class Compute;
 
 using Microsoft::WRL::ComPtr;
 

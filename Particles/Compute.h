@@ -26,6 +26,7 @@
 #pragma once
 
 #include "AdapterShared.h"
+#include <DirectXMath.h>
 
 class Compute : public AdapterShared
 {

@@ -14,8 +14,6 @@
 #endif
 
 #include <Windows.h>
-#include <DirectXMath.h>
-using namespace DirectX;
 #include <algorithm>
 #include "SimpleCamera.h"
 

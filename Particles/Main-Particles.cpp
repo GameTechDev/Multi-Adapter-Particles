@@ -24,17 +24,13 @@
 //
 //*********************************************************
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-
-#include <Windows.h>
 #include "WindowProc.h"
 #include "Particles.h"
 
+#pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "dxguid.lib") // DXGI_DEBUG_ALL guuid
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "d3dcompiler.lib")
-#pragma comment(lib, "dxgi.lib")
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------

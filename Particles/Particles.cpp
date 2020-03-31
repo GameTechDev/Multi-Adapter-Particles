@@ -24,16 +24,19 @@
 //
 //*********************************************************
 
-#include <d3d12.h>
-#include <Windows.h>
 #include <algorithm> // for std::min()
 
-#include "Particles.h"
-#include "d3dx12.h"
+#include <d3d12.h>
+#include <dxgidebug.h>
 
 #include "imgui.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx12.h"
+
+#include "Particles.h"
+#include "Compute.h"
+#include "Render.h"
+
 
 const INT ParticleCount = 4 * 1024 * 1024;
 

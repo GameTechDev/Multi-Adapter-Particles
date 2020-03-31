@@ -24,10 +24,10 @@
 //
 //*********************************************************
 
-#include <D3Dcompiler.h>
 #include <random>
 #include <sstream>
 #include <ppl.h>
+#include <D3Dcompiler.h>
 
 #include "Compute.h"
 #include "Render.h" // for struct Particle
