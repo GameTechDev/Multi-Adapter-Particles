@@ -77,7 +77,8 @@ public:
     };
 
     // stalls until adapter is idle
-    void WaitForGpu();
+    virtual void WaitForGpu() override;
+
 private:
     static constexpr std::uint32_t NUM_FRAMES = 2;
     const UINT m_numParticles;

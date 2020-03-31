@@ -66,7 +66,8 @@ public:
     };
 
     // stalls until adapter is idle
-    void WaitForGpu();
+    virtual void WaitForGpu() override;
+
 private:
     static constexpr UINT m_NUM_BUFFERS = 2;
 
