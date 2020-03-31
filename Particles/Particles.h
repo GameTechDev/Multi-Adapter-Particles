@@ -50,7 +50,7 @@ public:
 
     void Draw();
     void DrawGUI(ID3D12GraphicsCommandList* in_pCommandList);
-    bool GetVsyncEnabled() { return m_vsyncEnabled; }
+    bool GetVsyncEnabled() const { return m_vsyncEnabled; }
 
     // stop any threads
     void Shutdown();

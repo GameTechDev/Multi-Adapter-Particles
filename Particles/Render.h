@@ -56,7 +56,7 @@ public:
 
     //-----------------------------------------------------
     // used to create descriptor heap for UI
-    ID3D12Device* GetDevice() { return m_device.Get(); }
+    ID3D12Device* GetDevice() const { return m_device.Get(); }
     // used to initialize UI object
     static UINT GetNumFrames() { return NUM_FRAMES; }
     //-----------------------------------------------------
@@ -68,7 +68,7 @@ public:
     bool GetSupportsIntelCommandQueueExtension() const;
     //-----------------------------------------------------
 
-    HANDLE GetSharedFenceHandle() { return m_sharedFenceHandle; }
+    HANDLE GetSharedFenceHandle() const { return m_sharedFenceHandle; }
     void SetShared(Compute::SharedHandles in_sharedHandles);
 
     struct Particle

@@ -104,12 +104,12 @@ void SimpleCamera::Update(float elapsedSeconds)
     m_lookDirection.z = r * cosf(m_yaw);
 }
 
-XMMATRIX SimpleCamera::GetViewMatrix()
+XMMATRIX SimpleCamera::GetViewMatrix() const
 {
     return XMMatrixLookToRH(XMLoadFloat3(&m_position), XMLoadFloat3(&m_lookDirection), XMLoadFloat3(&m_upDirection));
 }
 
-XMMATRIX SimpleCamera::GetProjectionMatrix(float fov, float aspectRatio, float nearPlane, float farPlane)
+XMMATRIX SimpleCamera::GetProjectionMatrix(float fov, float aspectRatio, float nearPlane, float farPlane) const
 {
     return XMMatrixPerspectiveFovRH(fov, aspectRatio, nearPlane, farPlane);
 }
