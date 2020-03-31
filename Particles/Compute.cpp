@@ -266,27 +266,30 @@ void Compute::CopyState(Compute* in_pCompute)
     //---------------------------------------------------------------
     // copy the position data from the other compute device
     //---------------------------------------------------------------
-    m_commandAllocators[m_bufferIndex]->Reset();
-    ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
-
-    for (UINT i = 0; i < m_NUM_BUFFERS; i++)
     {
-        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_positionBuffers[i].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST));
+        m_commandAllocators[m_bufferIndex]->Reset();
+        ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
 
-        m_commandList->CopyBufferRegion(
-            m_positionBuffers[i].Get(), 0,
-            srcBuffer[i].Get(), 0,
-            m_numParticles * sizeof(Render::Particle));
+        for (UINT i = 0; i < m_NUM_BUFFERS; i++)
+        {
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_positionBuffers[i].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST));
 
-        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_positionBuffers[i].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE));
+            m_commandList->CopyBufferRegion(
+                m_positionBuffers[i].Get(), 0,
+                srcBuffer[i].Get(), 0,
+                m_numParticles * sizeof(Render::Particle));
+
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_positionBuffers[i].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE));
+        }
+
+        ThrowIfFailed(m_commandList->Close());
+
+        ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
+        m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
+
+        // wait for this to complete
+        WaitForGpu();
     }
-
-    ThrowIfFailed(m_commandList->Close());
-    ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
-    m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
-
-    // wait for this to complete
-    WaitForGpu();
 
     //---------------------------------------------------------------
     // within the other adapter, copy the velocity buffers into the shared position buffers
@@ -307,30 +310,33 @@ void Compute::CopyState(Compute* in_pCompute)
                 in_pCompute->m_velocityBuffers[i].Get(), 0,
                 m_numParticles * sizeof(ParticleVelocity));
         }
+
         ThrowIfFailed(in_pCompute->m_commandList->Close());
+
         ID3D12CommandList* ppCommandLists[] = { in_pCompute->m_commandList.Get() };
         in_pCompute->m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
 
         in_pCompute->WaitForGpu();
     }
 
-    m_commandAllocators[m_bufferIndex]->Reset();
-    ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
-
-    for (UINT i = 0; i < m_NUM_BUFFERS; i++)
     {
-        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_velocityBuffers[i].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST));
+        m_commandAllocators[m_bufferIndex]->Reset();
+        ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
 
-        m_commandList->CopyBufferRegion(
-            m_velocityBuffers[i].Get(), 0,
-            srcBuffer[i].Get(), 0,
-            m_numParticles * sizeof(ParticleVelocity));
+        for (UINT i = 0; i < m_NUM_BUFFERS; i++)
+        {
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_velocityBuffers[i].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST));
 
-        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_velocityBuffers[i].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
-    }
+            m_commandList->CopyBufferRegion(
+                m_velocityBuffers[i].Get(), 0,
+                srcBuffer[i].Get(), 0,
+                m_numParticles * sizeof(ParticleVelocity));
 
-    {
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_velocityBuffers[i].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+        }
+
         ThrowIfFailed(m_commandList->Close());
+
         ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
         m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
     }
