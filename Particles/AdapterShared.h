@@ -64,7 +64,7 @@ public:
 
 protected:
     // create a device with the highest feature support
-    void CreateDevice(IDXGIAdapter1* in_pAdapter, Microsoft::WRL::ComPtr<ID3D12Device>& in_device);
+    void CreateDevice(IDXGIAdapter1* in_pAdapter, ComPtr<ID3D12Device>& in_device);
 
     D3D12GpuTimer* m_pTimer;
     bool m_usingIntelCommandQueueExtension;
@@ -91,7 +91,7 @@ inline AdapterShared::~AdapterShared()
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-inline void AdapterShared::CreateDevice(IDXGIAdapter1* in_pAdapter, Microsoft::WRL::ComPtr<ID3D12Device>& out_device)
+inline void AdapterShared::CreateDevice(IDXGIAdapter1* in_pAdapter, ComPtr<ID3D12Device>& out_device)
 {
     ThrowIfFailed(D3D12CreateDevice(in_pAdapter, MINIMUM_D3D_FEATURE_LEVEL, IID_PPV_ARGS(&out_device)));
 

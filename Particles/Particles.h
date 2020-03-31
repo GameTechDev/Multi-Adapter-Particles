@@ -34,6 +34,8 @@
 #include "Compute.h"
 #include "Timer.h"
 
+using Microsoft::WRL::ComPtr;
+
 class Particles
 {
 public:
@@ -59,8 +61,8 @@ private:
     bool m_fullScreen;
 
     // used to create device & resize swap chain
-    Microsoft::WRL::ComPtr<IDXGIFactory4> m_dxgiFactory;
-    std::vector< Microsoft::WRL::ComPtr<IDXGIAdapter1> > m_adapters;
+    ComPtr<IDXGIFactory4> m_dxgiFactory;
+    std::vector< ComPtr<IDXGIAdapter1> > m_adapters;
     std::vector<std::string> m_adapterDescriptions;
     std::vector<const char*> m_adapterDescriptionPtrs;
 

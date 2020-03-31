@@ -34,7 +34,7 @@ class Render : public AdapterShared
 {
 public:
     Render(HWND in_hwnd, UINT in_numParticles,
-        Microsoft::WRL::ComPtr<IDXGIAdapter1> in_adapter,
+        ComPtr<IDXGIAdapter1> in_adapter,
         bool in_useIntelCommandQueueExtension,
         bool in_fullScreen, RECT in_windowDim);
     virtual ~Render();

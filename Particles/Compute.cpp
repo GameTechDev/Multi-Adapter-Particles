@@ -200,7 +200,7 @@ void Compute::CreateSharedBuffers()
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 Compute::Compute(UINT in_numParticles,
-    Microsoft::WRL::ComPtr<IDXGIAdapter1> in_adapter,
+    ComPtr<IDXGIAdapter1> in_adapter,
     bool in_useIntelCommandQueueExtension,
     Compute* in_pCompute) :
     m_numParticles(in_numParticles),

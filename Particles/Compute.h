@@ -31,7 +31,7 @@ class Compute : public AdapterShared
 {
 public:
     Compute(UINT in_numParticles,
-        Microsoft::WRL::ComPtr<IDXGIAdapter1> in_adapter,
+        ComPtr<IDXGIAdapter1> in_adapter,
         bool in_useIntelCommandQueueExtension,
         Compute* in_pCompute = 0);
     virtual ~Compute();

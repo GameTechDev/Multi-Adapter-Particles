@@ -34,7 +34,6 @@
 #include "ExtensionHelper.h" // Intel extensions
 
 using namespace DirectX;
-using Microsoft::WRL::ComPtr;
 
 #define USE_LATENCY_WAITABLE 1
 
@@ -166,7 +165,7 @@ void Render::SetUseIntelCommandQueueExtension(bool in_desiredSetting)
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 Render::Render(HWND in_hwnd, UINT in_numParticles,
-    Microsoft::WRL::ComPtr<IDXGIAdapter1> in_adapter,
+    ComPtr<IDXGIAdapter1> in_adapter,
     bool in_useIntelCommandQueueExtension,
     bool in_fullScreen, RECT in_windowDim) :
     m_numParticles(in_numParticles),
