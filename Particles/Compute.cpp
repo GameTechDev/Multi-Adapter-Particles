@@ -629,7 +629,6 @@ void Compute::InitializeParticles()
         nullptr,
         IID_PPV_ARGS(&velocityBufferUpload)));
 
-    D3D12_SUBRESOURCE_DATA velocityData = {};
     particleData.pData = reinterpret_cast<UINT8*>(&velocities[0]);
     particleData.RowPitch = velocityBufferSize;
     particleData.SlicePitch = particleData.RowPitch;
