@@ -252,7 +252,7 @@ void Compute::CopyState(Compute* in_pCompute)
 
     ComPtr<ID3D12Resource> srcBuffer[m_NUM_BUFFERS];
 
-    for (int i = 0; i < m_NUM_BUFFERS; i++)
+    for (UINT i = 0; i < m_NUM_BUFFERS; i++)
     {
         ThrowIfFailed(m_device->CreatePlacedResource(
             sharedHeap.Get(),
@@ -269,7 +269,7 @@ void Compute::CopyState(Compute* in_pCompute)
     m_commandAllocators[m_bufferIndex]->Reset();
     ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
 
-    for (int i = 0; i < m_NUM_BUFFERS; i++)
+    for (UINT i = 0; i < m_NUM_BUFFERS; i++)
     {
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_positionBuffers[i].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST));
 
@@ -296,7 +296,7 @@ void Compute::CopyState(Compute* in_pCompute)
         in_pCompute->m_commandAllocators[m_bufferIndex]->Reset();
         ThrowIfFailed(in_pCompute->m_commandList->Reset(in_pCompute->m_commandAllocators[m_bufferIndex].Get(), in_pCompute->m_computeState.Get()));
 
-        for (int i = 0; i < m_NUM_BUFFERS; i++)
+        for (UINT i = 0; i < m_NUM_BUFFERS; i++)
         {
             in_pCompute->m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(in_pCompute->m_positionBuffers[i].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST));
             in_pCompute->m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(in_pCompute->m_velocityBuffers[i].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
@@ -317,7 +317,7 @@ void Compute::CopyState(Compute* in_pCompute)
     m_commandAllocators[m_bufferIndex]->Reset();
     ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
 
-    for (int i = 0; i < m_NUM_BUFFERS; i++)
+    for (UINT i = 0; i < m_NUM_BUFFERS; i++)
     {
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_velocityBuffers[i].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST));
 
@@ -351,7 +351,7 @@ void Compute::SetAdapter(ComPtr<IDXGIAdapter1> in_adapter)
     m_usingIntelCommandQueueExtension = m_usingIntelCommandQueueExtension && m_pExtensionHelper->GetEnabled();
     CreateCommandQueue();
 
-    for (int i = 0; i < m_NUM_BUFFERS; i++)
+    for (UINT i = 0; i < m_NUM_BUFFERS; i++)
     {
         ThrowIfFailed(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COMPUTE, IID_PPV_ARGS(&m_commandAllocators[i])));
         std::wstringstream cmdAllocName;

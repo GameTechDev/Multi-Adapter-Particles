@@ -265,7 +265,7 @@ void Render::SetShared(Compute::SharedHandles in_sharedHandles)
         m_commandAllocators[m_frameIndex]->Reset();
         ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_frameIndex].Get(), nullptr));
 
-        for (int i = 0; i < m_NUM_BUFFERS; i++)
+        for (UINT i = 0; i < m_NUM_BUFFERS; i++)
         {
             m_commandList->CopyBufferRegion(pDstResource[i].Get(), 0, pSrcResource[i].Get(), 0, m_bufferSize);
         }
