@@ -64,7 +64,6 @@ private:
     std::vector<std::string> m_adapterDescriptions;
     std::vector<const char*> m_adapterDescriptionPtrs;
 
-    std::uint32_t m_width;
     std::uint32_t m_height;
 
     Timer m_frameTimer;
