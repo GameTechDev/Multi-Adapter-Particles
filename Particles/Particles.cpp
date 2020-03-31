@@ -174,6 +174,8 @@ Particles::~Particles()
 {
     delete m_pCompute;
     delete m_pRender;
+    ImGui_ImplDX12_Shutdown();
+    ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext(nullptr);
 }
 
