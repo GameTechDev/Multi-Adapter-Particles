@@ -34,8 +34,12 @@ public:
         Microsoft::WRL::ComPtr<IDXGIAdapter1> in_adapter,
         bool in_useIntelCommandQueueExtension,
         Compute* in_pCompute = 0);
+    virtual ~Compute();
 
-    ~Compute();
+    Compute(const Compute&) = delete;
+    Compute(Compute&&) = delete;
+    Compute& operator=(const Compute&) = delete;
+    Compute& operator=(Compute&&) = delete;
 
     // input is fence value of other adapter. waits to overwrite shared buffer.
     void Simulate(int in_numActiveParticles, UINT64 in_sharedFenceValue);

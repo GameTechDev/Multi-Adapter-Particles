@@ -40,7 +40,12 @@ class AdapterShared
 {
 public:
     AdapterShared();
-    ~AdapterShared();
+    virtual ~AdapterShared();
+
+    AdapterShared(const AdapterShared&) = delete;
+    AdapterShared(AdapterShared&&) = delete;
+    AdapterShared& operator=(const AdapterShared&) = delete;
+    AdapterShared& operator=(AdapterShared&&) = delete;
 
     // return GPU timers
     auto& GetGpuTimes() const { return m_pTimer->GetTimes(); }

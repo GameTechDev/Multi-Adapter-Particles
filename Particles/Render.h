@@ -37,7 +37,12 @@ public:
         Microsoft::WRL::ComPtr<IDXGIAdapter1> in_adapter,
         bool in_useIntelCommandQueueExtension,
         bool in_fullScreen, RECT in_windowDim);
-    ~Render();
+    virtual ~Render();
+
+    Render(const Render&) = delete;
+    Render(Render&&) = delete;
+    Render& operator=(const Render&) = delete;
+    Render& operator=(Render&&) = delete;
 
     // Draw() tells Particles to draw its UI
     // input is compute fence value. output is render fence value.
