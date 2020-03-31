@@ -97,7 +97,7 @@ inline void AdapterShared::CreateDevice(IDXGIAdapter1* in_pAdapter, ComPtr<ID3D1
 
     // check for UMA support (uses system memory as local memory)
     D3D12_FEATURE_DATA_ARCHITECTURE featureData = {};
-    out_device->CheckFeatureSupport(D3D12_FEATURE_ARCHITECTURE, &featureData, sizeof(featureData));
-    m_isUMA = featureData.UMA;
+    const HRESULT hr = out_device->CheckFeatureSupport(D3D12_FEATURE_ARCHITECTURE, &featureData, sizeof(featureData));
+    m_isUMA = SUCCEEDED(hr) && featureData.UMA;
 }
 
