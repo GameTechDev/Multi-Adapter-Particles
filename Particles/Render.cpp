@@ -402,7 +402,8 @@ void Render::CreateSwapChain()
     // from MSDN:
     // Note that it is important to call this before the first Present
     // in order to minimize the latency of the swap chain.
-    WaitForSingleObjectEx(m_swapChainEvent, 1000, TRUE);
+    const DWORD rv = ::WaitForSingleObjectEx(m_swapChainEvent, 1000, TRUE);
+    assert(rv == WAIT_OBJECT_0 || rv == WAIT_TIMEOUT);
 #else
     m_swapChainEvent = 0;
 #endif
@@ -639,7 +640,8 @@ void Render::WaitForGpu()
     m_renderFenceValue++;
 
     // Wait until the signal command has been processed.
-    WaitForSingleObject(m_renderFenceEvent, INFINITE);
+    const DWORD rv = ::WaitForSingleObject(m_renderFenceEvent, INFINITE);
+    assert(rv == WAIT_OBJECT_0);
 }
 
 //-----------------------------------------------------------------------------
@@ -663,7 +665,8 @@ HANDLE Render::MoveToNextFrame()
     if (m_renderFence->GetCompletedValue() < m_frameFenceValues[m_frameIndex])
     {
         ThrowIfFailed(m_renderFence->SetEventOnCompletion(m_frameFenceValues[m_frameIndex], m_renderFenceEvent));
-        //WaitForSingleObject(m_renderFenceEvent, INFINITE);
+        //const DWORD rv = ::WaitForSingleObject(m_renderFenceEvent, INFINITE);
+        //assert(rv == WAIT_OBJECT_0);
         returnHandle = m_renderFenceEvent;
     }
 
@@ -756,7 +759,8 @@ void Render::UpdateCamera()
 {
 #if USE_LATENCY_WAITABLE
     // Wait for the previous Present to complete.
-    WaitForSingleObjectEx(m_swapChainEvent, 1000, FALSE);
+    const DWORD rv = ::WaitForSingleObjectEx(m_swapChainEvent, 1000, FALSE);
+    assert(rv == WAIT_OBJECT_0 || rv == WAIT_TIMEOUT);
 #endif
     //m_timer.Tick(NULL);
     //m_camera.Update(static_cast<float>(m_timer.GetElapsedSeconds()));

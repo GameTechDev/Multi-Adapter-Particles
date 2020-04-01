@@ -673,7 +673,8 @@ void Compute::WaitForGpu()
     m_fenceValue++;
 
     // Wait until the signal command has been processed.
-    WaitForSingleObject(m_fenceEvent, INFINITE);
+    const DWORD rv = ::WaitForSingleObject(m_fenceEvent, INFINITE);
+    assert(rv == WAIT_OBJECT_0);
 }
 
 //-----------------------------------------------------------------------------

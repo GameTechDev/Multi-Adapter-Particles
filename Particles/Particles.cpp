@@ -355,7 +355,8 @@ void Particles::Draw()
     // only need to host-wait() around the Present() on the render adapter
     if (drawHandle)
     {
-        WaitForSingleObjectEx(drawHandle, INFINITE, FALSE);
+        const DWORD rv = ::WaitForSingleObjectEx(drawHandle, INFINITE, FALSE);
+        assert(rv == WAIT_OBJECT_0);
     }
 
     // if anything changed that might result in an adapter being removed,
