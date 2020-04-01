@@ -255,7 +255,7 @@ void Compute::CopyState(Compute* in_pCompute)
     // open shared buffers
     //---------------------------------------------------------------
     ComPtr<ID3D12Heap> sharedHeap;
-    m_device->OpenSharedHandle(in_pCompute->m_sharedHandles.m_heap, IID_PPV_ARGS(&sharedHeap));
+    ThrowIfFailed(m_device->OpenSharedHandle(in_pCompute->m_sharedHandles.m_heap, IID_PPV_ARGS(&sharedHeap)));
 
     const D3D12_RESOURCE_DESC crossAdapterDesc = CD3DX12_RESOURCE_DESC::Buffer(
         in_pCompute->m_sharedHandles.m_alignedDataSize,
@@ -571,6 +571,8 @@ void LoadParticles(
 //-----------------------------------------------------------------------------
 void Compute::InitializeParticles()
 {
+    assert(m_numParticles != 0);
+
     // Initialize the data in the buffers.
     std::vector<Render::Particle> positions;
     positions.resize(m_numParticles);

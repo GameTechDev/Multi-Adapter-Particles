@@ -24,6 +24,7 @@
 //
 //*********************************************************
 
+#include <cassert>
 #include <algorithm> // for std::min()
 
 #include <d3d12.h>
