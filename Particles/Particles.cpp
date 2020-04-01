@@ -209,7 +209,8 @@ void Particles::InitGui()
 
     CD3DX12_CPU_DESCRIPTOR_HANDLE cpu(m_srvHeap->GetCPUDescriptorHandleForHeapStart());
     CD3DX12_GPU_DESCRIPTOR_HANDLE gpu(m_srvHeap->GetGPUDescriptorHandleForHeapStart());
-
+    
+    ImGui_ImplDX12_Shutdown();
     ImGui_ImplDX12_Init(
         pDevice,
         Render::GetNumFrames(),
