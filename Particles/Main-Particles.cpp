@@ -60,6 +60,7 @@ int WINAPI WinMain(
         0, 0, hInstance, 0);
     if (!hWnd)
     {
+        ::UnregisterClassW(wc.lpszClassName, hInstance);
         return -1;
     }
 
