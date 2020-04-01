@@ -257,7 +257,7 @@ void Compute::CopyState(Compute* in_pCompute)
     ComPtr<ID3D12Heap> sharedHeap;
     m_device->OpenSharedHandle(in_pCompute->m_sharedHandles.m_heap, IID_PPV_ARGS(&sharedHeap));
 
-    D3D12_RESOURCE_DESC crossAdapterDesc = CD3DX12_RESOURCE_DESC::Buffer(
+    const D3D12_RESOURCE_DESC crossAdapterDesc = CD3DX12_RESOURCE_DESC::Buffer(
         in_pCompute->m_sharedHandles.m_alignedDataSize,
         D3D12_RESOURCE_FLAG_ALLOW_CROSS_ADAPTER);
 
@@ -407,7 +407,7 @@ void Compute::Initialize(ComPtr<IDXGIAdapter1> in_adapter)
     // Compute root signature.
     {
         // one UAV range of 2 registers, u0 and u1
-        CD3DX12_DESCRIPTOR_RANGE1 uavRanges[] = {
+        const CD3DX12_DESCRIPTOR_RANGE1 uavRanges[] = {
             CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 5, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE)
         };
 
@@ -453,7 +453,7 @@ void Compute::Initialize(ComPtr<IDXGIAdapter1> in_adapter)
         {
             if (pErrorMsgs != nullptr)
             {
-                char* pMessage = (char*)pErrorMsgs->GetBufferPointer();
+                const char* pMessage = (const char*)pErrorMsgs->GetBufferPointer();
                 ::OutputDebugStringA(pMessage);
                 pErrorMsgs->Release();
             }            
@@ -619,7 +619,7 @@ void Compute::InitializeParticles()
     ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
 
     {
-        CD3DX12_RESOURCE_BARRIER barriers[] =
+        const CD3DX12_RESOURCE_BARRIER barriers[] =
         {
             CD3DX12_RESOURCE_BARRIER::Transition(m_positionBuffers[0].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST),
             CD3DX12_RESOURCE_BARRIER::Transition(m_positionBuffers[1].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST),
@@ -655,7 +655,7 @@ void Compute::InitializeParticles()
     UpdateSubresources<1>(m_commandList.Get(), m_velocityBuffers[1].Get(), velocityBufferUpload.Get(), 0, 0, 1, &particleData);
 
     {
-        CD3DX12_RESOURCE_BARRIER barriers[] =
+        const CD3DX12_RESOURCE_BARRIER barriers[] =
         {
             CD3DX12_RESOURCE_BARRIER::Transition(m_positionBuffers[0].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE),
             CD3DX12_RESOURCE_BARRIER::Transition(m_positionBuffers[1].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE),
@@ -726,8 +726,8 @@ void Compute::Simulate(int in_numActiveParticles, UINT64 in_sharedFenceValue)
     // /previous/ copy must complete before overwriting the old state
     ThrowIfFailed(m_commandQueue->Wait(m_sharedFence.Get(), in_sharedFenceValue-1));
 
-    UINT oldIndex = m_bufferIndex; // 0 or 1. Old corresponds to the surface the render device is currently using
-    UINT newIndex = 1 - oldIndex;  // 1 or 0. New corresponds to the surface the render device is NOT using
+    const UINT oldIndex = m_bufferIndex; // 0 or 1. Old corresponds to the surface the render device is currently using
+    const UINT newIndex = 1 - oldIndex;  // 1 or 0. New corresponds to the surface the render device is NOT using
 
     ThrowIfFailed(m_commandAllocators[m_bufferIndex]->Reset());
     ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
@@ -746,7 +746,7 @@ void Compute::Simulate(int in_numActiveParticles, UINT64 in_sharedFenceValue)
     // set heap base to point at previous simulation results
     // note that descriptor heap[2] is a copy of heap[0], so when the base is heap[1] the dest is heap[2]==heap[0]
     //-------------------------------------------------
-    CD3DX12_GPU_DESCRIPTOR_HANDLE srcHeapHandle(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), srcHeapIndex, m_srvUavDescriptorSize);
+    const CD3DX12_GPU_DESCRIPTOR_HANDLE srcHeapHandle(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), srcHeapIndex, m_srvUavDescriptorSize);
     m_commandList->SetComputeRootDescriptorTable(ComputeRootUAVTable, srcHeapHandle);
 
     //-------------------------------------------------

@@ -51,7 +51,7 @@ LRESULT CALLBACK WindowProc::WndProc(HWND hWnd, UINT message, WPARAM wParam,
     case WM_KEYDOWN:
         if (m_inputState.m_hasFocus)
         {
-            uint8_t keyDown = static_cast<uint8_t>(wParam);
+            const uint8_t keyDown = static_cast<uint8_t>(wParam);
             bool* pDrawEnabled = (bool*)::GetWindowLongPtr(hWnd, GWLP_USERDATA);
 
             // if previous state was key up
@@ -93,7 +93,7 @@ LRESULT CALLBACK WindowProc::WndProc(HWND hWnd, UINT message, WPARAM wParam,
     case WM_KEYUP:
         if (m_inputState.m_hasFocus)
         {
-            uint8_t keyDown = static_cast<uint8_t>(wParam);
+            const uint8_t keyDown = static_cast<uint8_t>(wParam);
             m_inputState.m_keyPress = 0;
 
             if (VK_UP == keyDown) m_inputState.m_keyDown.forward = 0;
@@ -111,8 +111,8 @@ LRESULT CALLBACK WindowProc::WndProc(HWND hWnd, UINT message, WPARAM wParam,
     case WM_RBUTTONDOWN:
         if (m_inputState.m_hasFocus)
         {
-            int32_t x = int32_t(lParam & 0x0000ffff);
-            int32_t y = int32_t(lParam) >> 16;
+            const int32_t x = int32_t(lParam & 0x0000ffff);
+            const int32_t y = int32_t(lParam) >> 16;
             m_inputState.m_mousePos.Set(x, y);
         }
         break;
@@ -121,8 +121,8 @@ LRESULT CALLBACK WindowProc::WndProc(HWND hWnd, UINT message, WPARAM wParam,
     {
         if (m_inputState.m_hasFocus)
         {
-            int32_t x = int32_t(lParam & 0x0000ffff);
-            int32_t y = int32_t(lParam) >> 16;
+            const int32_t x = int32_t(lParam & 0x0000ffff);
+            const int32_t y = int32_t(lParam) >> 16;
             InputState::Vector2i pos;
             pos.Set(x, y);
 

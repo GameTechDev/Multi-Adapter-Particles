@@ -747,7 +747,7 @@ void Render::CreateParticleBuffers()
         m_buffers[i]->SetName(wss.str().c_str());
 #endif
 
-        CD3DX12_CPU_DESCRIPTOR_HANDLE srvHandle(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), SrvParticlePosVelo0 + i, m_srvUavDescriptorSize);
+        const CD3DX12_CPU_DESCRIPTOR_HANDLE srvHandle(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), SrvParticlePosVelo0 + i, m_srvUavDescriptorSize);
         m_device->CreateShaderResourceView(m_buffers[i].Get(), &srvDesc, srvHandle);
     }
 }
@@ -787,8 +787,8 @@ void Render::CopySimulationResults(UINT64 in_fenceValue, int in_numActiveParticl
     //-------------------------------------------------------------------------
     ThrowIfFailed(m_copyQueue->Wait(m_renderFence.Get(), m_renderFenceValue-1));
 
-    UINT srcSharedIndex = 1 - m_sharedBufferIndex;     // reading from shared buffer pointed to by m_sharedBufferIndex
-    UINT dstLocalIndex = 1 - m_currentBufferIndex; // writing to local buffer pointed to by m_currentBufferIndex
+    const UINT srcSharedIndex = 1 - m_sharedBufferIndex;     // reading from shared buffer pointed to by m_sharedBufferIndex
+    const UINT dstLocalIndex = 1 - m_currentBufferIndex; // writing to local buffer pointed to by m_currentBufferIndex
     m_sharedBufferIndex = 1 - m_sharedBufferIndex; // move shared index forward for next time
 
     ID3D12Resource* pDstResource = m_buffers[dstLocalIndex].Get();
@@ -900,7 +900,7 @@ HANDLE Render::Draw(int in_numActiveParticles, Particles* in_pParticles, UINT64&
     //-------------------------------------------------------------------------
     // Present the frame.
     //-------------------------------------------------------------------------
-    UINT syncInterval = in_pParticles->GetVsyncEnabled() ? 1 : 0;
+    const UINT syncInterval = in_pParticles->GetVsyncEnabled() ? 1 : 0;
     UINT presentFlags = 0;
     if ((m_windowedSupportsTearing) && (!m_fullScreen) && (0 == syncInterval))
     {

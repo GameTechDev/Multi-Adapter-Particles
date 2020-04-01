@@ -60,9 +60,8 @@ void InitDebugLayer()
 //-----------------------------------------------------------------------------
 void Particles::ShareHandles()
 {
-    HANDLE renderFenceHandle = m_pRender->GetSharedFenceHandle();
-    auto sharedHandles = m_pCompute->GetSharedHandles(renderFenceHandle);
-    m_pRender->SetShared(sharedHandles);
+    const HANDLE renderFenceHandle = m_pRender->GetSharedFenceHandle();
+    m_pRender->SetShared(m_pCompute->GetSharedHandles(renderFenceHandle));
 }
 
 //-----------------------------------------------------------------------------
@@ -125,7 +124,7 @@ Particles::Particles(HWND in_hwnd)
     }
 
     // initial state
-    size_t numAdapters = m_adapters.size();
+    const size_t numAdapters = m_adapters.size();
     if (m_adapters.size())
     {
         m_renderAdapterIndex = 0;
@@ -345,7 +344,7 @@ void Particles::Draw()
 
     // start simulation. This also starts copy of results for next frame
     UINT64 renderSharedFenceValue = m_pCompute->GetFenceValue();
-    HANDLE drawHandle = m_pRender->Draw(m_numParticlesRendered, this, renderSharedFenceValue, m_numParticlesCopied);
+    const HANDLE drawHandle = m_pRender->Draw(m_numParticlesRendered, this, renderSharedFenceValue, m_numParticlesCopied);
     m_pCompute->Simulate(m_numParticlesSimulated, renderSharedFenceValue);
 
     // because the command lists of each adapter wait() on each other,
