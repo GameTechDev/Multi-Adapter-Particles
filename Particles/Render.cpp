@@ -354,7 +354,7 @@ void Render::CreateSwapChain()
     // if full screen mode, launch into the current settings
     DXGI_SWAP_CHAIN_FULLSCREEN_DESC fullScreenDesc = {};
     const DXGI_SWAP_CHAIN_FULLSCREEN_DESC* pFullScreenDesc = m_fullScreen ? &fullScreenDesc : nullptr;
-    IDXGIOutput* pOutput = nullptr;
+    ComPtr<IDXGIOutput> output;
 
     // on switch to full screen, try to move to a monitor attached to the adapter
     // if no monitor attached, just use the "current" display
@@ -368,11 +368,11 @@ void Render::CreateSwapChain()
         UINT top = 0;
 
         // take the first attached monitor
-        HRESULT result = m_adapter->EnumOutputs(0, &pOutput);
-        if (SUCCEEDED(result) && pOutput)
+        HRESULT result = m_adapter->EnumOutputs(0, &output);
+        if (SUCCEEDED(result))
         {
             DXGI_OUTPUT_DESC outputDesc;
-            ThrowIfFailed(pOutput->GetDesc(&outputDesc));
+            ThrowIfFailed(output->GetDesc(&outputDesc));
 
             swapChainDesc.Width = outputDesc.DesktopCoordinates.right - outputDesc.DesktopCoordinates.left;
             swapChainDesc.Height = outputDesc.DesktopCoordinates.bottom - outputDesc.DesktopCoordinates.top;
@@ -389,7 +389,7 @@ void Render::CreateSwapChain()
 
     ComPtr<IDXGISwapChain1> swapChain;
     ThrowIfFailed(factory2->CreateSwapChainForHwnd(m_commandQueue.Get(), m_hwnd,
-        &swapChainDesc, pFullScreenDesc, pOutput, &swapChain));
+        &swapChainDesc, pFullScreenDesc, output.Get(), &swapChain));
 
     m_viewport = CD3DX12_VIEWPORT(0.0f, 0.0f,
         static_cast<FLOAT>(swapChainDesc.Width), static_cast<FLOAT>(swapChainDesc.Height));
