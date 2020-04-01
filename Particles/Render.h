@@ -145,6 +145,7 @@ private:
         // for convenience when computing the struct's size.
         float padding[32-1-1];
     };
+
     ComPtr<ID3D12Resource> m_vertexBuffer;
     ComPtr<ID3D12Resource> m_vertexBufferUpload;
     D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
@@ -160,6 +161,7 @@ private:
     UINT8* m_pConstantBufferGSData; // re-used across device changes. destroy!
     SimpleCamera m_camera;
     float m_aspectRatio;
+
     void UpdateCamera();
 
     void CreateVertexBuffer();

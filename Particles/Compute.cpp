@@ -299,7 +299,6 @@ void Compute::CopyState(Compute* in_pCompute)
         ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
         m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
 
-        // wait for this to complete
         WaitForGpu();
     }
 
@@ -315,7 +314,6 @@ void Compute::CopyState(Compute* in_pCompute)
         {
             in_pCompute->m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(in_pCompute->m_positionBuffers[i].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST));
             in_pCompute->m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(in_pCompute->m_velocityBuffers[i].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
-
 
             in_pCompute->m_commandList->CopyBufferRegion(
                 in_pCompute->m_positionBuffers[i].Get(), 0,
@@ -419,7 +417,6 @@ void Compute::Initialize(ComPtr<IDXGIAdapter1> in_adapter)
         computeRootSignatureDesc.Init_1_1(_countof(rootParameters), rootParameters, 0, nullptr);
 
         D3D12_FEATURE_DATA_ROOT_SIGNATURE featureData = {};
-
         // This is the highest version the sample supports. If CheckFeatureSupport succeeds, the HighestVersion returned will not be greater than this.
         featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_1;
 

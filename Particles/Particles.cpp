@@ -199,6 +199,7 @@ Particles::~Particles()
 void Particles::InitGui()
 {
     m_srvHeap.Reset();
+    
     ID3D12Device* pDevice = m_pRender->GetDevice();
 
     // Describe and create a shader resource view (SRV) heap for the texture.

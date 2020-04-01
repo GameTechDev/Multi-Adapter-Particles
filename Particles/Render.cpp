@@ -143,6 +143,7 @@ void Render::CreateCommandQueue()
         desc.Type = D3D12_COMMAND_LIST_TYPE_COPY;
         ThrowIfFailed(m_device->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_copyQueue)));
     }
+
     m_commandQueue->SetName(L"Render Queue");
     m_copyQueue->SetName(L"Copy Queue");
 
@@ -268,6 +269,7 @@ void Render::SetShared(const Compute::SharedHandles& in_sharedHandles)
         m_buffers[i]->SetName(wss.str().c_str());
 #endif
     }
+
     pSharedHeap->Release();
 
     // copy initial state from the other adapter
@@ -308,6 +310,7 @@ void Render::CreateSwapChain()
 #ifdef _DEBUG
     flags |= DXGI_CREATE_FACTORY_DEBUG;
 #endif
+
     if (FAILED(::CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory))))
     {
         flags &= ~DXGI_CREATE_FACTORY_DEBUG;
@@ -369,6 +372,7 @@ void Render::CreateSwapChain()
         {
             DXGI_OUTPUT_DESC outputDesc;
             ThrowIfFailed(pOutput->GetDesc(&outputDesc));
+
             swapChainDesc.Width = outputDesc.DesktopCoordinates.right - outputDesc.DesktopCoordinates.left;
             swapChainDesc.Height = outputDesc.DesktopCoordinates.bottom - outputDesc.DesktopCoordinates.top;
             left = outputDesc.DesktopCoordinates.left;
@@ -410,6 +414,7 @@ void Render::CreateSwapChain()
     }
 
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
+
 #if USE_LATENCY_WAITABLE
     m_swapChainEvent = m_swapChain->GetFrameLatencyWaitableObject();
 
@@ -465,6 +470,7 @@ void Render::LoadAssets()
         rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
         rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
         ThrowIfFailed(m_device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap)));
+
         CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc;
         rootSignatureDesc.Init_1_1(_countof(rootParameters), rootParameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
@@ -699,6 +705,7 @@ void Render::CreateVertexBuffer()
     {
         vertices[i].color = XMFLOAT4(1.0f, 1.0f, 0.2f, 1.0f);
     }
+
     const UINT bufferSize = m_numParticles * sizeof(ParticleVertex);
 
     ThrowIfFailed(m_device->CreateCommittedResource(

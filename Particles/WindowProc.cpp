@@ -33,8 +33,8 @@ InputState WindowProc::m_inputState;
 // Called every time the application receives a message
 //--------------------------------------------------------------------------------------
 extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-LRESULT CALLBACK WindowProc::WndProc(HWND hWnd, UINT message, WPARAM wParam,
-    LPARAM lParam)
+
+LRESULT CALLBACK WindowProc::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     if (ImGui_ImplWin32_WndProcHandler(hWnd, message, wParam, lParam))
     {
