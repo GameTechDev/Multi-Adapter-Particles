@@ -67,7 +67,7 @@ private:
     bool m_fullScreen;
 
     // used to create device & resize swap chain
-    ComPtr<IDXGIFactory4> m_dxgiFactory;
+    ComPtr<IDXGIFactory3> m_dxgiFactory;
     std::vector< ComPtr<IDXGIAdapter1> > m_adapters;
     std::vector<std::string> m_adapterDescriptions;
     std::vector<const char*> m_adapterDescriptionPtrs;

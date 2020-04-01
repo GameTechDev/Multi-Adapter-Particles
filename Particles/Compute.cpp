@@ -391,7 +391,6 @@ void Compute::SetAdapter(ComPtr<IDXGIAdapter1> in_adapter)
     }
 
     // create timer on the command queue
-    delete m_pTimer;
     m_pTimer = new D3D12GpuTimer(m_device.Get(), m_commandQueue.Get(), static_cast<UINT>(GpuTimers::NumTimers));
     m_pTimer->SetTimerName(static_cast<UINT>(GpuTimers::Simulate), "simulate ms");
 }
@@ -617,7 +616,6 @@ void Compute::InitializeParticles()
     particleData.RowPitch = dataSize;
     particleData.SlicePitch = particleData.RowPitch;
 
-    ID3D12GraphicsCommandList* pCommandList = m_commandList.Get();
     ThrowIfFailed(m_commandAllocators[m_bufferIndex]->Reset());
     ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
 
@@ -668,9 +666,9 @@ void Compute::InitializeParticles()
         m_commandList->ResourceBarrier(_countof(barriers), barriers);
     }
 
-    ThrowIfFailed(pCommandList->Close());
+    ThrowIfFailed(m_commandList->Close());
 
-    ID3D12CommandList* ppCommandLists[] = { pCommandList };
+    ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
     m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
 
     WaitForGpu();
@@ -697,7 +695,6 @@ void Compute::WaitForGpu()
 //-----------------------------------------------------------------------------
 const Compute::SharedHandles& Compute::GetSharedHandles(HANDLE in_fenceHandle)
 {
-    assert(m_sharedFence == nullptr);
     ThrowIfFailed(m_device->OpenSharedHandle(in_fenceHandle, IID_PPV_ARGS(&m_sharedFence)));
 
     m_sharedHandles.m_bufferIndex = m_bufferIndex;

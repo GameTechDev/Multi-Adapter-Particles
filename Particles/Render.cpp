@@ -218,7 +218,8 @@ Render::~Render()
     if (m_fullScreen)
     {
         // be sure to leave things in windowed state
-        m_swapChain->SetFullscreenState(FALSE, nullptr);
+        const HRESULT result = m_swapChain->SetFullscreenState(FALSE, nullptr);
+        assert(SUCCEEDED(result));
     }
     if (m_pConstantBufferGSData)
     {
@@ -320,8 +321,11 @@ void Render::CreateSwapChain()
     }
     else
     {
+        ComPtr<IDXGIFactory5> factory5;
+        ThrowIfFailed(factory.As<IDXGIFactory5>(&factory5));
+
         BOOL allowTearing = FALSE;
-        const HRESULT result = factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &allowTearing, sizeof(allowTearing));
+        const HRESULT result = factory5->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &allowTearing, sizeof(allowTearing));
         m_windowedSupportsTearing = SUCCEEDED(result) && allowTearing;
     }
 
@@ -343,10 +347,9 @@ void Render::CreateSwapChain()
         swapChainDesc.Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
     }
 
-    DXGI_SWAP_CHAIN_FULLSCREEN_DESC* pFullScreenDesc = nullptr;
-
     // if full screen mode, launch into the current settings
     DXGI_SWAP_CHAIN_FULLSCREEN_DESC fullScreenDesc = {};
+    const DXGI_SWAP_CHAIN_FULLSCREEN_DESC* pFullScreenDesc = m_fullScreen ? &fullScreenDesc : nullptr;
     IDXGIOutput* pOutput = nullptr;
 
     // on switch to full screen, try to move to a monitor attached to the adapter
@@ -377,7 +380,6 @@ void Render::CreateSwapChain()
             SWP_FRAMECHANGED);
 
         fullScreenDesc.Windowed = FALSE;
-        pFullScreenDesc = &fullScreenDesc;
     }
 
     ComPtr<IDXGISwapChain1> swapChain;
@@ -479,7 +481,7 @@ void Render::LoadAssets()
         CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart());
 
         // Create a RTV and a command allocator for each frame.
-        for (std::uint32_t i = 0; i < NUM_FRAMES; i++)
+        for (UINT i = 0; i < NUM_FRAMES; i++)
         {
             ThrowIfFailed(m_swapChain->GetBuffer(i, IID_PPV_ARGS(&m_renderTargets[i])));
             m_device->CreateRenderTargetView(m_renderTargets[i].Get(), nullptr, rtvHandle);
@@ -787,6 +789,7 @@ void Render::UpdateCamera()
     constantBufferGS.particleIntensity = m_particleIntensity;
 
     UINT8* destination = m_pConstantBufferGSData + sizeof(ConstantBufferGS) * m_frameIndex;
+    assert(destination);
     memcpy(destination, &constantBufferGS, sizeof(ConstantBufferGS));
 }
 

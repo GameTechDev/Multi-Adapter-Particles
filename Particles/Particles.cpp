@@ -96,22 +96,23 @@ Particles::Particles(HWND in_hwnd)
     , m_numParticlesLinked(true)
 {
     m_windowInfo.cbSize = sizeof(WINDOWINFO);
-    ::GetWindowInfo(m_hwnd, &m_windowInfo);
+    const BOOL rv = ::GetWindowInfo(m_hwnd, &m_windowInfo);
+    assert(rv);
 
     InitDebugLayer();
 
-    ComPtr<IDXGIFactory2> factory;
+    ComPtr<IDXGIFactory3> factory;
     
     UINT flags = 0;
 #ifdef _DEBUG
     flags |= DXGI_CREATE_FACTORY_DEBUG;
 #endif
-    if (FAILED(CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory))))
+
+    if (FAILED(::CreateDXGIFactory2(flags, IID_PPV_ARGS(&m_dxgiFactory))))
     {
         flags &= ~DXGI_CREATE_FACTORY_DEBUG;
-        ThrowIfFailed(CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory)));
+        ThrowIfFailed(::CreateDXGIFactory2(flags, IID_PPV_ARGS(&m_dxgiFactory)));
     }
-    ThrowIfFailed(factory.As<IDXGIFactory4>(&m_dxgiFactory));
 
     // find adapters
     ComPtr<IDXGIAdapter1> adapter;
@@ -138,7 +139,7 @@ Particles::Particles(HWND in_hwnd)
 
     // initial state
     const size_t numAdapters = m_adapters.size();
-    if (m_adapters.size())
+    if (numAdapters > 0)
     {
         m_renderAdapterIndex = 0;
         // FIXME
@@ -398,7 +399,8 @@ void Particles::Draw()
     // switching from windowed to full screen? remember window state
     if (m_fullScreen && !prevFullScreen)
     {
-        ::GetWindowInfo(m_hwnd, &m_windowInfo);
+        const BOOL rv = ::GetWindowInfo(m_hwnd, &m_windowInfo);
+        assert(rv);
     }
 
     // new render device?
@@ -413,20 +415,20 @@ void Particles::Draw()
         ((prevQueueExtension != m_commandQueueExtensionEnabled) && (m_pRender->GetSupportsIntelCommandQueueExtension()))
         )
     {
-        delete m_pRender;
-
         // for windowed mode, reset the window style and position before creating new Render
         if (prevFullScreen && !m_fullScreen)
         {
-            UINT width = m_windowInfo.rcWindow.right - m_windowInfo.rcWindow.left;
-            UINT height = m_windowInfo.rcWindow.bottom - m_windowInfo.rcWindow.top;
-            UINT left = m_windowInfo.rcWindow.left;
-            UINT top = m_windowInfo.rcWindow.top;
-            SetWindowLongPtr(m_hwnd, GWL_STYLE, m_windowInfo.dwStyle);
-            SetWindowPos(m_hwnd, HWND_NOTOPMOST, left, top, width, height, SWP_FRAMECHANGED);
+            const UINT width = m_windowInfo.rcWindow.right - m_windowInfo.rcWindow.left;
+            const UINT height = m_windowInfo.rcWindow.bottom - m_windowInfo.rcWindow.top;
+            const UINT left = m_windowInfo.rcWindow.left;
+            const UINT top = m_windowInfo.rcWindow.top;
+            ::SetWindowLongPtr(m_hwnd, GWL_STYLE, m_windowInfo.dwStyle);
+            ::SetWindowPos(m_hwnd, HWND_NOTOPMOST, left, top, width, height, SWP_FRAMECHANGED);
         }
 
+        delete m_pRender;
         m_pRender = new Render(m_hwnd, ParticleCount, m_adapters[m_renderAdapterIndex], m_commandQueueExtensionEnabled, m_fullScreen, m_windowInfo.rcClient);
+
 #if IMGUI_ENABLED
         InitGui();
 #endif
