@@ -106,9 +106,8 @@ Particles::Particles(HWND in_hwnd)
     ComPtr<IDXGIAdapter1> adapter = nullptr;
     for (UINT i = 0; m_dxgiFactory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
     {
-
         DXGI_ADAPTER_DESC1 desc;
-        adapter->GetDesc1(&desc);
+        ThrowIfFailed(adapter->GetDesc1(&desc));
 
         if (((desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) == 0) && (desc.VendorId != 5140))
         {

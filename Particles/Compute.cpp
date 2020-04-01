@@ -275,7 +275,7 @@ void Compute::CopyState(Compute* in_pCompute)
     // copy the position data from the other compute device
     //---------------------------------------------------------------
     {
-        m_commandAllocators[m_bufferIndex]->Reset();
+        ThrowIfFailed(m_commandAllocators[m_bufferIndex]->Reset());
         ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
 
         for (UINT i = 0; i < m_NUM_BUFFERS; i++)
@@ -328,7 +328,7 @@ void Compute::CopyState(Compute* in_pCompute)
     }
 
     {
-        m_commandAllocators[m_bufferIndex]->Reset();
+        ThrowIfFailed(m_commandAllocators[m_bufferIndex]->Reset());
         ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
 
         for (UINT i = 0; i < m_NUM_BUFFERS; i++)
@@ -504,7 +504,8 @@ void Compute::Initialize(ComPtr<IDXGIAdapter1> in_adapter)
     }
 
     // close command buffer & execute to initialize gpu resources
-    m_commandList->Close();
+    ThrowIfFailed(m_commandList->Close());
+
     ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
     m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
 
@@ -605,7 +606,7 @@ void Compute::InitializeParticles()
     particleData.SlicePitch = particleData.RowPitch;
 
     ID3D12GraphicsCommandList* pCommandList = m_commandList.Get();
-    m_commandAllocators[m_bufferIndex]->Reset();
+    ThrowIfFailed(m_commandAllocators[m_bufferIndex]->Reset());
     ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
 
     {
@@ -655,8 +656,10 @@ void Compute::InitializeParticles()
     }
 
     ThrowIfFailed(pCommandList->Close());
+
     ID3D12CommandList* ppCommandLists[] = { pCommandList };
     m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
+
     WaitForGpu();
 }
 
@@ -681,7 +684,8 @@ void Compute::WaitForGpu()
 //-----------------------------------------------------------------------------
 Compute::SharedHandles Compute::GetSharedHandles(HANDLE in_fenceHandle)
 {
-    m_device->OpenSharedHandle(in_fenceHandle, IID_PPV_ARGS(&m_sharedFence));
+    assert(m_sharedFence == nullptr);
+    ThrowIfFailed(m_device->OpenSharedHandle(in_fenceHandle, IID_PPV_ARGS(&m_sharedFence)));
 
     m_sharedHandles.m_bufferIndex = m_bufferIndex;
     return m_sharedHandles;
@@ -715,7 +719,7 @@ void Compute::Simulate(int in_numActiveParticles, UINT64 in_sharedFenceValue)
     UINT oldIndex = m_bufferIndex; // 0 or 1. Old corresponds to the surface the render device is currently using
     UINT newIndex = 1 - oldIndex;  // 1 or 0. New corresponds to the surface the render device is NOT using
 
-    m_commandAllocators[m_bufferIndex]->Reset();
+    ThrowIfFailed(m_commandAllocators[m_bufferIndex]->Reset());
     ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
 
     m_pTimer->BeginTimer(m_commandList.Get(), static_cast<std::uint32_t>(GpuTimers::Simulate));
@@ -748,6 +752,7 @@ void Compute::Simulate(int in_numActiveParticles, UINT64 in_sharedFenceValue)
     m_pTimer->ResolveAllTimers(m_commandList.Get());
 
     ThrowIfFailed(m_commandList->Close());
+
     ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
     m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
 

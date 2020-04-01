@@ -232,10 +232,10 @@ void Render::SetShared(Compute::SharedHandles in_sharedHandles)
 {
     m_sharedBufferIndex = in_sharedHandles.m_bufferIndex;
 
-    ID3D12Heap* pSharedHeap = 0;
-    m_device->OpenSharedHandle(in_sharedHandles.m_heap, IID_PPV_ARGS(&pSharedHeap));
+    ID3D12Heap* pSharedHeap = nullptr;
+    ThrowIfFailed(m_device->OpenSharedHandle(in_sharedHandles.m_heap, IID_PPV_ARGS(&pSharedHeap)));
 
-    m_device->OpenSharedHandle(in_sharedHandles.m_fence, IID_PPV_ARGS(&m_sharedComputeFence));
+    ThrowIfFailed(m_device->OpenSharedHandle(in_sharedHandles.m_fence, IID_PPV_ARGS(&m_sharedComputeFence)));
 
     D3D12_RESOURCE_DESC crossAdapterDesc = CD3DX12_RESOURCE_DESC::Buffer(in_sharedHandles.m_alignedDataSize,
         D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS |
@@ -266,7 +266,7 @@ void Render::SetShared(Compute::SharedHandles in_sharedHandles)
         auto pDstResource = m_buffers;
         auto pSrcResource = m_sharedBuffers;
 
-        m_commandAllocators[m_frameIndex]->Reset();
+        ThrowIfFailed(m_commandAllocators[m_frameIndex]->Reset());
         ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_frameIndex].Get(), nullptr));
 
         for (UINT i = 0; i < m_NUM_BUFFERS; i++)
@@ -275,6 +275,7 @@ void Render::SetShared(Compute::SharedHandles in_sharedHandles)
         }
 
         ThrowIfFailed(m_commandList->Close());
+
         ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
         m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
 
@@ -348,11 +349,11 @@ void Render::CreateSwapChain()
         UINT top = 0;
 
         // take the first attached monitor
-        m_adapter->EnumOutputs(0, &pOutput);
-        if (pOutput)
+        HRESULT result = m_adapter->EnumOutputs(0, &pOutput);
+        if (SUCCEEDED(result) && pOutput)
         {
             DXGI_OUTPUT_DESC outputDesc;
-            pOutput->GetDesc(&outputDesc);
+            ThrowIfFailed(pOutput->GetDesc(&outputDesc));
             swapChainDesc.Width = outputDesc.DesktopCoordinates.right - outputDesc.DesktopCoordinates.left;
             swapChainDesc.Height = outputDesc.DesktopCoordinates.bottom - outputDesc.DesktopCoordinates.top;
             left = outputDesc.DesktopCoordinates.left;
@@ -389,7 +390,8 @@ void Render::CreateSwapChain()
 
     if (m_fullScreen)
     {
-        m_swapChain->SetFullscreenState(TRUE, nullptr);
+        const HRESULT result = m_swapChain->SetFullscreenState(TRUE, nullptr);
+        assert(SUCCEEDED(result));
     }
 
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
@@ -466,7 +468,7 @@ void Render::LoadAssets()
         // Create a RTV and a command allocator for each frame.
         for (std::uint32_t i = 0; i < NUM_FRAMES; i++)
         {
-            (m_swapChain->GetBuffer(i, IID_PPV_ARGS(&m_renderTargets[i])));
+            ThrowIfFailed(m_swapChain->GetBuffer(i, IID_PPV_ARGS(&m_renderTargets[i])));
             m_device->CreateRenderTargetView(m_renderTargets[i].Get(), nullptr, rtvHandle);
             rtvHandle.Offset(1, m_rtvDescriptorSize);
 
@@ -541,9 +543,7 @@ void Render::LoadAssets()
         psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
         psoDesc.SampleDesc.Count = 1;
 
-        HRESULT hr = m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState));
-
-        ThrowIfFailed(hr);
+        ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState)));
         NAME_D3D12_OBJECT(m_pipelineState);
     }
 
@@ -577,7 +577,8 @@ void Render::LoadAssets()
     }
 
     // init resources, e.g. upload initial partical positions
-    m_commandList->Close();
+    ThrowIfFailed(m_commandList->Close());
+
     ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
     m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
 
@@ -601,7 +602,7 @@ void Render::LoadAssets()
     {
         ThrowIfFailed(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_COPY, m_copyAllocators[m_frameIndex].Get(), nullptr, IID_PPV_ARGS(&m_copyList)));
         m_copyList->SetName(L"Copy CommandList");
-        m_copyList->Close();
+        ThrowIfFailed(m_copyList->Close());
 
         m_copyFenceValue = 0;
         ThrowIfFailed(m_device->CreateFence(
@@ -792,7 +793,7 @@ void Render::CopySimulationResults(UINT64 in_fenceValue, int in_numActiveParticl
     ID3D12Resource* pDstResource = m_buffers[dstLocalIndex].Get();
     ID3D12Resource* pSrcResource = m_sharedBuffers[srcSharedIndex].Get();
 
-    m_copyAllocators[m_frameIndex]->Reset();
+    ThrowIfFailed(m_copyAllocators[m_frameIndex]->Reset());
     ThrowIfFailed(m_copyList->Reset(m_copyAllocators[m_frameIndex].Get(), nullptr));
 
     // a resource barrier gives maximum information to the runtime that may help other adapters with cache sync
@@ -804,6 +805,7 @@ void Render::CopySimulationResults(UINT64 in_fenceValue, int in_numActiveParticl
     m_copyList->CopyBufferRegion(pDstResource, 0, pSrcResource, 0, in_numActiveParticles * sizeof(Particle));
 
     ThrowIfFailed(m_copyList->Close());
+
     ID3D12CommandList* ppCommandLists[] = { m_copyList.Get() };
     m_copyQueue->ExecuteCommandLists(1, ppCommandLists);
 
@@ -833,7 +835,7 @@ HANDLE Render::Draw(int in_numActiveParticles, Particles* in_pParticles, UINT64&
     // start copy for next frame. no reason to delay.
     CopySimulationResults(inout_fenceValue, in_numParticlesCopied);
 
-    m_commandAllocators[m_frameIndex]->Reset();
+    ThrowIfFailed(m_commandAllocators[m_frameIndex]->Reset());
     ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_frameIndex].Get(), m_pipelineState.Get()));
 
     m_pTimer->BeginTimer(m_commandList.Get(), static_cast<std::uint32_t>(GpuTimers::FPS));
