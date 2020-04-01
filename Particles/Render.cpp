@@ -290,7 +290,8 @@ void Render::SetShared(const Compute::SharedHandles& in_sharedHandles)
 //-----------------------------------------------------------------------------
 void Render::CreateSwapChain()
 {
-    ComPtr<IDXGIFactory5> factory = nullptr;
+    ComPtr<IDXGIFactory3> factory;
+
     UINT flags = 0;
 #ifdef _DEBUG
     flags |= DXGI_CREATE_FACTORY_DEBUG;
@@ -405,7 +406,7 @@ void Render::CreateSwapChain()
     const DWORD rv = ::WaitForSingleObjectEx(m_swapChainEvent, 1000, TRUE);
     assert(rv == WAIT_OBJECT_0 || rv == WAIT_TIMEOUT);
 #else
-    m_swapChainEvent = 0;
+    m_swapChainEvent = nullptr;
 #endif
 
     m_aspectRatio = static_cast<float>(swapChainDesc.Width) / static_cast<float>(swapChainDesc.Height);
@@ -490,6 +491,9 @@ void Render::LoadAssets()
     // Create the pipeline states, which includes compiling and loading shaders
     //-------------------------------------------------------------------------
     {
+        // Load and compile shaders.
+        ID3DBlob* pErrorMsgs = nullptr;
+
         ComPtr<ID3DBlob> vertexShader;
         ComPtr<ID3DBlob> geometryShader;
         ComPtr<ID3DBlob> pixelShader;
@@ -501,8 +505,6 @@ void Render::LoadAssets()
         const UINT compileFlags = 0;
 #endif
 
-        // Load and compile shaders.
-        ID3DBlob* pErrorMsgs = 0;
         // all shaders in same file
         const wchar_t* pShaderName = L"ParticleDraw.hlsl";
         const std::wstring fullShaderPath = GetAssetFullPath(pShaderName);
@@ -660,7 +662,8 @@ HANDLE Render::MoveToNextFrame()
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
 
     // If the next frame is not ready to be rendered yet, wait until it is ready.
-    HANDLE returnHandle = 0;
+    HANDLE returnHandle = nullptr;
+
     if (m_renderFence->GetCompletedValue() < m_frameFenceValues[m_frameIndex])
     {
         ThrowIfFailed(m_renderFence->SetEventOnCompletion(m_frameFenceValues[m_frameIndex], m_renderFenceEvent));
@@ -761,7 +764,8 @@ void Render::UpdateCamera()
     const DWORD rv = ::WaitForSingleObjectEx(m_swapChainEvent, 1000, FALSE);
     assert(rv == WAIT_OBJECT_0 || rv == WAIT_TIMEOUT);
 #endif
-    //m_timer.Tick(NULL);
+
+    //m_timer.Tick(nullptr);
     //m_camera.Update(static_cast<float>(m_timer.GetElapsedSeconds()));
     m_camera.Update(0);
 

@@ -87,7 +87,8 @@ Particles::Particles(HWND in_hwnd)
 
     InitDebugLayer();
 
-    ComPtr<IDXGIFactory2> factory = nullptr;
+    ComPtr<IDXGIFactory2> factory;
+    
     UINT flags = 0;
 #ifdef _DEBUG
     flags |= DXGI_CREATE_FACTORY_DEBUG;
@@ -100,7 +101,7 @@ Particles::Particles(HWND in_hwnd)
     ThrowIfFailed(factory.As<IDXGIFactory4>(&m_dxgiFactory));
 
     // find adapters
-    ComPtr<IDXGIAdapter1> adapter = nullptr;
+    ComPtr<IDXGIAdapter1> adapter;
     for (UINT i = 0; m_dxgiFactory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
     {
         DXGI_ADAPTER_DESC1 desc;
@@ -120,7 +121,6 @@ Particles::Particles(HWND in_hwnd)
             // m_adapterDescriptionPtrs is an array of pointers into m_adapterDescriptions, and is used by imgui
             m_adapterDescriptionPtrs.push_back(m_adapterDescriptions.back().c_str());
         }
-        adapter = nullptr;
     }
 
     // initial state
