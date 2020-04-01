@@ -295,10 +295,10 @@ void Render::CreateSwapChain()
 #ifdef _DEBUG
     flags |= DXGI_CREATE_FACTORY_DEBUG;
 #endif
-    if (FAILED(CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory))))
+    if (FAILED(::CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory))))
     {
         flags &= ~DXGI_CREATE_FACTORY_DEBUG;
-        ThrowIfFailed(CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory)));
+        ThrowIfFailed(::CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory)));
     }
 
     // tearing supported for full-screen borderless windows?
@@ -342,8 +342,8 @@ void Render::CreateSwapChain()
     if (m_fullScreen)
     {
         // get the dimensions of the primary monitor, same as GetDeviceCaps( hdcPrimaryMonitor, HORZRES)
-        swapChainDesc.Width = GetSystemMetrics(SM_CXSCREEN);
-        swapChainDesc.Height = GetSystemMetrics(SM_CYSCREEN);
+        swapChainDesc.Width = ::GetSystemMetrics(SM_CXSCREEN);
+        swapChainDesc.Height = ::GetSystemMetrics(SM_CYSCREEN);
         // primary monitor has 0,0 as top-left
         UINT left = 0;
         UINT top = 0;
@@ -359,8 +359,9 @@ void Render::CreateSwapChain()
             left = outputDesc.DesktopCoordinates.left;
             top = outputDesc.DesktopCoordinates.top;
         }
-        SetWindowLongPtr(m_hwnd, GWL_STYLE, WS_VISIBLE | WS_POPUP);
-        SetWindowPos(m_hwnd, HWND_TOP, left, top, swapChainDesc.Width, swapChainDesc.Height,
+
+        ::SetWindowLongPtr(m_hwnd, GWL_STYLE, WS_VISIBLE | WS_POPUP);
+        ::SetWindowPos(m_hwnd, HWND_TOP, left, top, swapChainDesc.Width, swapChainDesc.Height,
             SWP_FRAMECHANGED);
 
         fullScreenDesc.Windowed = FALSE;
@@ -591,7 +592,7 @@ void Render::LoadAssets()
         m_renderFenceValue++;
 
         // Create an event handle to use for frame synchronization.
-        m_renderFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        m_renderFenceEvent = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
         if (m_renderFenceEvent == nullptr)
         {
             ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));

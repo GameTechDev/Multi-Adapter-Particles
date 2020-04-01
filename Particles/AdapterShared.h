@@ -92,7 +92,7 @@ inline AdapterShared::~AdapterShared()
 //-----------------------------------------------------------------------------
 inline void AdapterShared::CreateDevice(IDXGIAdapter1* in_pAdapter, ComPtr<ID3D12Device>& out_device)
 {
-    ThrowIfFailed(D3D12CreateDevice(in_pAdapter, MINIMUM_D3D_FEATURE_LEVEL, IID_PPV_ARGS(&out_device)));
+    ThrowIfFailed(::D3D12CreateDevice(in_pAdapter, MINIMUM_D3D_FEATURE_LEVEL, IID_PPV_ARGS(&out_device)));
 
     // check for UMA support (uses system memory as local memory)
     D3D12_FEATURE_DATA_ARCHITECTURE featureData = {};

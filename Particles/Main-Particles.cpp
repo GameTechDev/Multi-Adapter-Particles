@@ -45,11 +45,11 @@ int WINAPI WinMain(
     wc.style = CS_OWNDC;
     wc.lpfnWndProc = WindowProc::WndProc;
     wc.cbWndExtra = 0;
-    RegisterClassW(&wc);
+    ::RegisterClassW(&wc);
 
     LONG windowDim = 1024;
     RECT windowRect = { 0, 0, windowDim, windowDim };
-    AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);
+    ::AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);
 
     HWND hWnd = CreateWindow(
         wc.lpszClassName, L"Particles",
@@ -63,21 +63,21 @@ int WINAPI WinMain(
         return -1;
     }
 
-    ShowWindow(hWnd, SW_SHOWNORMAL);
+    ::ShowWindow(hWnd, SW_SHOWNORMAL);
 
     bool drawEnabled = true;
 
-    SetWindowLongPtr(hWnd, GWLP_USERDATA, LONG_PTR(&drawEnabled));
+    ::SetWindowLongPtr(hWnd, GWLP_USERDATA, LONG_PTR(&drawEnabled));
 
     Particles particles(hWnd);
 
     MSG msg = { 0 };
     while (WM_QUIT != msg.message)
     {
-        if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
+        if (::PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
         {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
+            ::TranslateMessage(&msg);
+            ::DispatchMessage(&msg);
         }
         else
         {
@@ -90,7 +90,7 @@ int WINAPI WinMain(
 
     particles.Shutdown();
 
-    UnregisterClassW(wc.lpszClassName, hInstance);
+    ::UnregisterClassW(wc.lpszClassName, hInstance);
 
     return 0;
 }

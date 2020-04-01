@@ -383,7 +383,7 @@ void Compute::SetAdapter(ComPtr<IDXGIAdapter1> in_adapter)
     ThrowIfFailed(m_device->CreateSharedHandle(m_fence.Get(), nullptr, GENERIC_ALL, 0/*L"COMPUTE_FENCE"*/, &m_sharedHandles.m_fence));
     m_fenceValue++;
 
-    m_fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    m_fenceEvent = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
     if (m_fenceEvent == nullptr)
     {
         ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));

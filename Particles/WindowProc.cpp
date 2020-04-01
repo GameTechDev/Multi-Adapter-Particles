@@ -39,8 +39,6 @@ LRESULT CALLBACK WindowProc::WndProc(HWND hWnd, UINT message, WPARAM wParam,
     if (ImGui_ImplWin32_WndProcHandler(hWnd, message, wParam, lParam))
         return true;
 
-    bool* pDrawEnabled = (bool*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
-
     switch (message)
     {
     case WM_SETFOCUS:
@@ -54,6 +52,7 @@ LRESULT CALLBACK WindowProc::WndProc(HWND hWnd, UINT message, WPARAM wParam,
         if (m_inputState.m_hasFocus)
         {
             uint8_t keyDown = static_cast<uint8_t>(wParam);
+            bool* pDrawEnabled = (bool*)::GetWindowLongPtr(hWnd, GWLP_USERDATA);
 
             // if previous state was key up
             if (0 == (lParam & 1 << 30))
@@ -64,7 +63,7 @@ LRESULT CALLBACK WindowProc::WndProc(HWND hWnd, UINT message, WPARAM wParam,
 
             if (keyDown == VK_ESCAPE)
             {
-                PostQuitMessage(0);
+                ::PostQuitMessage(0);
             }
             else
             {
@@ -105,7 +104,7 @@ LRESULT CALLBACK WindowProc::WndProc(HWND hWnd, UINT message, WPARAM wParam,
         break;
 
     case WM_DESTROY:
-        PostQuitMessage(0);
+        ::PostQuitMessage(0);
         break;
 
     case WM_LBUTTONDOWN:
@@ -144,7 +143,7 @@ LRESULT CALLBACK WindowProc::WndProc(HWND hWnd, UINT message, WPARAM wParam,
 
     default:
         // Handle any other messages
-        return DefWindowProc(hWnd, message, wParam, lParam);
+        return ::DefWindowProc(hWnd, message, wParam, lParam);
     }
 
     return 0;

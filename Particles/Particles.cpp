@@ -45,14 +45,12 @@ const INT ParticleCount = 4 * 1024 * 1024;
 //-----------------------------------------------------------------------------
 void InitDebugLayer()
 {
+    ID3D12Debug1* pDebugController = nullptr;
+    if (SUCCEEDED(::D3D12GetDebugInterface(IID_PPV_ARGS(&pDebugController))))
     {
-        ID3D12Debug1* pDebugController = nullptr;
-        if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&pDebugController))))
-        {
-            //pDebugController->SetEnableGPUBasedValidation(TRUE);
-            pDebugController->EnableDebugLayer();
-            pDebugController->Release();
-        }
+        //pDebugController->SetEnableGPUBasedValidation(TRUE);
+        pDebugController->EnableDebugLayer();
+        pDebugController->Release();
     }
 }
 
@@ -86,7 +84,7 @@ Particles::Particles(HWND in_hwnd)
     m_numParticlesLinked = true;
 
     m_windowInfo.cbSize = sizeof(WINDOWINFO);
-    GetWindowInfo(m_hwnd, &m_windowInfo);
+    ::GetWindowInfo(m_hwnd, &m_windowInfo);
 
     InitDebugLayer();
 
@@ -114,9 +112,9 @@ Particles::Particles(HWND in_hwnd)
             m_adapters.push_back(adapter);
 
             std::string narrowString;
-            int numChars = WideCharToMultiByte(CP_UTF8, 0, desc.Description, _countof(desc.Description), NULL, 0, NULL, NULL);
+            const int numChars = ::WideCharToMultiByte(CP_UTF8, 0, desc.Description, _countof(desc.Description), nullptr, 0, nullptr, nullptr);
             narrowString.resize(numChars);
-            WideCharToMultiByte(CP_UTF8, 0, desc.Description, (int)narrowString.size(), &narrowString[0], numChars, NULL, NULL);
+            ::WideCharToMultiByte(CP_UTF8, 0, desc.Description, (int)narrowString.size(), &narrowString[0], numChars, nullptr, nullptr);
 
             // m_adapterDescriptions holds the strings
             m_adapterDescriptions.push_back(narrowString);
@@ -387,7 +385,7 @@ void Particles::Draw()
     // switching from windowed to full screen? remember window state
     if (m_fullScreen && !prevFullScreen)
     {
-        GetWindowInfo(m_hwnd, &m_windowInfo);
+        ::GetWindowInfo(m_hwnd, &m_windowInfo);
     }
 
     // new render device?
