@@ -51,7 +51,7 @@ int WINAPI WinMain(
     RECT windowRect = { 0, 0, windowDim, windowDim };
     ::AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);
 
-    HWND hWnd = CreateWindow(
+    HWND hWnd = ::CreateWindow(
         wc.lpszClassName, L"Particles",
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT,

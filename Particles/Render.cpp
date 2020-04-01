@@ -222,6 +222,7 @@ Render::~Render()
         const HRESULT result = m_swapChain->SetFullscreenState(FALSE, nullptr);
         assert(SUCCEEDED(result));
     }
+
     if (m_pConstantBufferGSData)
     {
         const CD3DX12_RANGE readRange(0, 0);

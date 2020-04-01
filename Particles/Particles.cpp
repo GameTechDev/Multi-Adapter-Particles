@@ -403,6 +403,7 @@ void Particles::Draw()
     // switching from windowed to full screen? remember window state
     if (m_fullScreen && !prevFullScreen)
     {
+        assert(m_windowInfo.cbSize == sizeof(WINDOWINFO));
         const BOOL rv = ::GetWindowInfo(m_hwnd, &m_windowInfo);
         assert(rv);
     }
@@ -426,6 +427,7 @@ void Particles::Draw()
             const UINT height = m_windowInfo.rcWindow.bottom - m_windowInfo.rcWindow.top;
             const UINT left = m_windowInfo.rcWindow.left;
             const UINT top = m_windowInfo.rcWindow.top;
+
             ::SetWindowLongPtr(m_hwnd, GWL_STYLE, m_windowInfo.dwStyle);
             ::SetWindowPos(m_hwnd, HWND_NOTOPMOST, left, top, width, height, SWP_FRAMECHANGED);
         }

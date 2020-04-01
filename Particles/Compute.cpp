@@ -529,9 +529,9 @@ void Compute::Initialize(ComPtr<IDXGIAdapter1> in_adapter)
 
 
 
-#define USE_ORIG 1 
+#define USE_ORIG 0
 #define USE_SCALAR_OPTIMIZED 0
-#define USE_SIMD_OPTIMIZED 0
+#define USE_SIMD_OPTIMIZED 1
 
 #if (USE_ORIG + USE_SCALAR_OPTIMIZED + USE_SIMD_OPTIMIZED) != 1
 #error "use one of the options"
