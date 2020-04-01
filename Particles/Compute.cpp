@@ -526,6 +526,93 @@ void Compute::Initialize(ComPtr<IDXGIAdapter1> in_adapter)
     CreateSharedBuffers();
 }
 
+
+
+
+#define USE_ORIG 1 
+#define USE_SCALAR_OPTIMIZED 0
+#define USE_SIMD_OPTIMIZED 0
+
+#if (USE_ORIG + USE_SCALAR_OPTIMIZED + USE_SIMD_OPTIMIZED) != 1
+#error "use one of the options"
+#endif
+
+#define FAST_SIMD_RAND_COMPATABILITY
+#define BENCHMARK
+
+//-----------------------------------------------------------------------------
+// fast rand version
+// see https://software.intel.com/en-us/articles/fast-random-number-generator-on-the-intel-pentiumr-4-processor
+//-----------------------------------------------------------------------------
+thread_local
+unsigned int g_seed = 0;
+
+inline void fast_srand(int seed)
+{
+    g_seed = seed;
+}
+
+// returns one integer, similar output value range as C lib
+inline int fast_rand()
+{
+    g_seed = 214013 * g_seed + 2531011;
+    return (g_seed >> 16) & 0x7FFF;
+}
+
+
+//-----------------------------------------------------------------------------
+// faster SIMD rand version
+// see https://software.intel.com/en-us/articles/fast-random-number-generator-on-the-intel-pentiumr-4-processor
+//-----------------------------------------------------------------------------
+
+#include <emmintrin.h>
+
+thread_local
+__m128i g_simd_seed;
+
+void srand_sse(unsigned int seed)
+{
+    g_simd_seed = _mm_set_epi32(seed, seed + 1, seed, seed + 1);
+}
+
+inline __m128i __vectorcall  rand_sse()
+{
+    __declspec(align(16)) /*static*/ const unsigned int mult[4]   = { 214013, 17405, 214013, 69069 };
+    __declspec(align(16)) /*static*/ const unsigned int gadd[4]   = { 2531011, 10395331, 13737667, 1 };
+    __declspec(align(16)) /*static*/ const unsigned int mask[4]   = { 0xFFFFFFFF, 0, 0xFFFFFFFF, 0 };
+    __declspec(align(16)) /*static*/ const unsigned int masklo[4] = { 0x00007FFF, 0x00007FFF, 0x00007FFF, 0x00007FFF };
+
+    const __m128i adder = _mm_load_si128((__m128i*) gadd);
+    __m128i multiplier = _mm_load_si128((__m128i*) mult);
+    const __m128i mod_mask = _mm_load_si128((__m128i*) mask);
+    const __m128i sra_mask = _mm_load_si128((__m128i*) masklo);
+    __m128i cur_seed_split = _mm_shuffle_epi32(g_simd_seed, _MM_SHUFFLE(2, 3, 0, 1));
+
+    g_simd_seed = _mm_mul_epu32(g_simd_seed, multiplier);
+    multiplier = _mm_shuffle_epi32(multiplier, _MM_SHUFFLE(2, 3, 0, 1));
+    cur_seed_split = _mm_mul_epu32(cur_seed_split, multiplier);
+    g_simd_seed = _mm_and_si128(g_simd_seed, mod_mask);
+    cur_seed_split = _mm_and_si128(cur_seed_split, mod_mask);
+    cur_seed_split = _mm_shuffle_epi32(cur_seed_split, _MM_SHUFFLE(2, 3, 0, 1));
+    g_simd_seed = _mm_or_si128(g_simd_seed, cur_seed_split);
+    g_simd_seed = _mm_add_epi32(g_simd_seed, adder);
+
+#if defined(FAST_SIMD_RAND_COMPATABILITY)
+
+    // Add the lines below if you wish to reduce your results to 16-bit vals...
+    __m128i sseresult = _mm_srai_epi32(g_simd_seed, 16);
+    sseresult = _mm_and_si128(sseresult, sra_mask);
+    return sseresult;
+
+#else
+
+    return g_simd_seed;
+
+#endif
+}
+
+#include "Timer.h"
+
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 void LoadParticles(
@@ -533,12 +620,24 @@ void LoadParticles(
     _Out_writes_(numParticles) Compute::ParticleVelocity* out_pVelocities,
     const XMFLOAT3& center, const float initialSpeed, float spread, UINT numParticles)
 {
+#ifdef BENCHMARK
+    Timer t;
+    t.Start();
+#endif
+
+#if USE_ORIG == 1
+    // those are not thread safe
     std::random_device randomDevice;  //Will be used to obtain a seed for the random number engine
     std::mt19937 gen(randomDevice()); //Standard mersenne_twister_engine seeded with rd()
     std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+#endif
 
     concurrency::parallel_for(UINT(0), numParticles, [&](UINT i)
         {
+#if USE_ORIG == 1
+
+            // "original version"
+
             XMVECTOR delta = XMVectorSet(dist(gen), dist(gen), dist(gen), 0);
             while (XMVectorGetX(XMVector3LengthSq(delta)) < 10.0f)
             {
@@ -558,7 +657,109 @@ void LoadParticles(
             out_pVelocities[i].velocity.x = XMVectorGetX(vel);
             out_pVelocities[i].velocity.y = XMVectorGetY(vel);
             out_pVelocities[i].velocity.z = XMVectorGetZ(vel);
+
+#elif USE_SCALAR_OPTIMIZED == 1
+
+            // "first batch of optimizations"
+            // -using fast rand
+            // -hoisting out scalar factor for 1 multiplication
+            // -don't use very inefficient loads and stores
+            // -SSA form
+            // -const
+
+            // collapse all multiplication factors into one
+            // floating point accuracy / determinism (order of ops) aside, this is good enough for this workload
+            constexpr float k_scale = (1.f / (float)RAND_MAX) * 2.f;
+
+            float x = ((float)fast_rand() * k_scale) - 1.f;
+            float y = ((float)fast_rand() * k_scale) - 1.f;
+            float z = ((float)fast_rand() * k_scale) - 1.f;
+
+            XMVECTOR delta = XMVectorSet(x, y, z, 0.f);
+            while (XMVectorGetX(XMVector3LengthSq(delta)) < 10.f)
+            {
+                x = ((float)fast_rand() * k_scale) - 1.f;
+                y = ((float)fast_rand() * k_scale) - 1.f;
+                z = ((float)fast_rand() * k_scale) - 1.f;
+
+                const XMVECTOR random = XMVectorSet(x, y, z, 0.f);
+                delta = XMVectorAdd(delta, random);
+            }
+
+            delta = XMVector3Normalize(delta);
+            delta = XMVectorScale(delta, spread);
+
+            const XMVECTOR centerSimd = XMLoadFloat3(&center);
+            const XMVECTOR position = XMVectorAdd(centerSimd, delta);
+            XMStoreFloat4(&out_pParticles[i].position, position);
+
+            // create a velocity perpindicular-ish to the direction to the center of gravity
+            const XMVECTOR direction = XMVector3NormalizeEst(XMLoadFloat3((XMFLOAT3*)&out_pParticles[i].position));
+            const XMVECTOR perp = XMVector3NormalizeEst(XMVectorSubtract(XMVectorSet(1.f, 1.f, 1.f, 0.f), direction));
+            const XMVECTOR vel = XMVectorScale(XMVector3Cross(direction, perp), initialSpeed);
+            XMStoreFloat3(&out_pVelocities[i].velocity, vel);
+
+#elif USE_SIMD_OPTIMIZED == 1
+
+            const XMVECTOR limit = XMVectorSet(10.f, 10.f, 10.f, 10.f);
+            XMVECTOR delta = g_XMZero;
+            XMVECTOR deltaLengthSq = g_XMZero;
+
+            // collapse all multiplication factors into one
+            // floating point accuracy / determinism (order of ops) aside, this is good enough for this workload
+            constexpr float k_scale = (1.f / (float)RAND_MAX) * 2.f;
+
+            const __m128 k_scale_v = _mm_set_ps(k_scale, k_scale, k_scale, k_scale);
+            const __m128 k_one = _mm_set_ps(1.f, 1.f, 1.f, 1.f);
+
+            do
+            {
+                const __m128i rand_vi = rand_sse();
+                __m128 rand_vf = _mm_cvtepi32_ps(rand_vi);
+
+                rand_vf = _mm_mul_ps(rand_vf, k_scale_v);
+                rand_vf = _mm_sub_ps(rand_vf, k_one);
+
+                const XMVECTOR random = rand_vf;
+
+                delta = XMVectorAdd(delta, random);
+                deltaLengthSq = XMVector3LengthSq(delta);
+            }
+            while (XMVector3Less(deltaLengthSq, limit));
+
+            delta = XMVector3Normalize(delta);
+            delta = XMVectorScale(delta, spread);
+
+            const XMVECTOR centerSimd = XMLoadFloat3(&center);
+
+            const XMVECTOR position = XMVectorAdd(centerSimd, delta);
+            XMStoreFloat4(&out_pParticles[i].position, position);
+
+            // create a velocity perpindicular-ish to the direction to the center of gravity
+            const XMVECTOR direction = XMVector3NormalizeEst(XMLoadFloat3((XMFLOAT3*)&out_pParticles[i].position));
+            const XMVECTOR perp = XMVector3NormalizeEst(XMVectorSubtract(XMVectorSet(1.f, 1.f, 1.f, 0.f), direction));
+            const XMVECTOR vel = XMVectorScale(XMVector3Cross(direction, perp), initialSpeed);
+            XMStoreFloat3(&out_pVelocities[i].velocity, vel);
+
+#endif
     });
+
+#ifdef BENCHMARK
+    t.Stop();
+
+    char buffer[255];
+    sprintf_s(buffer, 255, "\nLoad Particles: %s %f\n", 
+#if USE_ORIG == 1
+        "USE_OLD_ORIG",
+#elif USE_SCALAR_OPTIMIZED == 1
+        "USE_SCALAR_OPTIMIZED",
+#elif USE_SIMD_OPTIMIZED == 1
+        "USE_SIMD_OPTIMIZED",
+#endif
+        t.GetTime());
+
+    ::OutputDebugStringA(buffer);
+#endif
 }
 
 //-----------------------------------------------------------------------------
