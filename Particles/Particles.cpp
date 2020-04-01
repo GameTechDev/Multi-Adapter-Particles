@@ -420,6 +420,8 @@ void Particles::Draw()
         ((prevQueueExtension != m_commandQueueExtensionEnabled) && (m_pRender->GetSupportsIntelCommandQueueExtension()))
         )
     {
+        delete m_pRender;
+
         // for windowed mode, reset the window style and position before creating new Render
         if (prevFullScreen && !m_fullScreen)
         {
@@ -432,7 +434,6 @@ void Particles::Draw()
             ::SetWindowPos(m_hwnd, HWND_NOTOPMOST, left, top, width, height, SWP_FRAMECHANGED);
         }
 
-        delete m_pRender;
         m_pRender = new Render(m_hwnd, ParticleCount, m_adapters[m_renderAdapterIndex], m_commandQueueExtensionEnabled, m_fullScreen, m_windowInfo.rcClient);
 
 #if IMGUI_ENABLED
