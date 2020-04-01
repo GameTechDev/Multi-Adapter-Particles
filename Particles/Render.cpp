@@ -304,17 +304,17 @@ void Render::SetShared(const Compute::SharedHandles& in_sharedHandles)
 //-----------------------------------------------------------------------------
 void Render::CreateSwapChain()
 {
-    ComPtr<IDXGIFactory3> factory;
+    ComPtr<IDXGIFactory2> factory2;
 
     UINT flags = 0;
 #ifdef _DEBUG
     flags |= DXGI_CREATE_FACTORY_DEBUG;
 #endif
 
-    if (FAILED(::CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory))))
+    if (FAILED(::CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory2))))
     {
         flags &= ~DXGI_CREATE_FACTORY_DEBUG;
-        ThrowIfFailed(::CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory)));
+        ThrowIfFailed(::CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory2)));
     }
 
     // tearing supported for full-screen borderless windows?
@@ -325,7 +325,7 @@ void Render::CreateSwapChain()
     else
     {
         ComPtr<IDXGIFactory5> factory5;
-        ThrowIfFailed(factory.As<IDXGIFactory5>(&factory5));
+        ThrowIfFailed(factory2.As<IDXGIFactory5>(&factory5));
 
         BOOL allowTearing = FALSE;
         const HRESULT result = factory5->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &allowTearing, sizeof(allowTearing));
@@ -387,7 +387,7 @@ void Render::CreateSwapChain()
     }
 
     ComPtr<IDXGISwapChain1> swapChain;
-    ThrowIfFailed(factory->CreateSwapChainForHwnd(m_commandQueue.Get(), m_hwnd,
+    ThrowIfFailed(factory2->CreateSwapChainForHwnd(m_commandQueue.Get(), m_hwnd,
         &swapChainDesc, pFullScreenDesc, pOutput, &swapChain));
 
     m_viewport = CD3DX12_VIEWPORT(0.0f, 0.0f,
@@ -402,7 +402,7 @@ void Render::CreateSwapChain()
     - To use this flag in full screen Win32 apps, the application should present to a fullscreen borderless window
     and disable automatic ALT+ENTER fullscreen switching using IDXGIFactory::MakeWindowAssociation.
      */
-    ThrowIfFailed(factory->MakeWindowAssociation(m_hwnd,
+    ThrowIfFailed(factory2->MakeWindowAssociation(m_hwnd,
         DXGI_MWA_NO_WINDOW_CHANGES | DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_PRINT_SCREEN));
 
     ThrowIfFailed(swapChain.As(&m_swapChain));

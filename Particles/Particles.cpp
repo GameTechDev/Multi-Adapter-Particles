@@ -100,8 +100,6 @@ Particles::Particles(HWND in_hwnd)
     assert(rv);
 
     InitDebugLayer();
-
-    ComPtr<IDXGIFactory3> factory;
     
     UINT flags = 0;
 #ifdef _DEBUG

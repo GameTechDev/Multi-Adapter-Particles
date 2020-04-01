@@ -72,11 +72,16 @@ inline ExtensionHelper::ExtensionHelper(ID3D12Device* in_pDevice)
     {
         const LUID deviceLuid = in_pDevice->GetAdapterLuid();
 
-        IDXGIFactory* factory = nullptr;
-        ThrowIfFailed(::CreateDXGIFactory(IID_PPV_ARGS(&factory)));
+        UINT flags = 0;
+#ifdef _DEBUG
+        flags |= DXGI_CREATE_FACTORY_DEBUG;
+#endif
+
+        IDXGIFactory2* factory2 = nullptr;
+        ThrowIfFailed(::CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory2)));
 
         IDXGIAdapter* adapter = nullptr;
-        for (UINT i = 0; factory->EnumAdapters(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
+        for (UINT i = 0; factory2->EnumAdapters(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
         {
             DXGI_ADAPTER_DESC desc;
             ThrowIfFailed(adapter->GetDesc(&desc));
@@ -89,6 +94,8 @@ inline ExtensionHelper::ExtensionHelper(ID3D12Device* in_pDevice)
                 break;
             }
         }
+
+        SAFE_RELEASE(factory2);
     }
 
     if (intelDevice)
