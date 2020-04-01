@@ -156,6 +156,7 @@ Particles::Particles(HWND in_hwnd)
         throw;
     }
 
+#if IMGUI_ENABLED
     //-----------------------------
     // one-time UI setup
     //-----------------------------
@@ -171,6 +172,7 @@ Particles::Particles(HWND in_hwnd)
 
     // render device specific setup
     InitGui();
+#endif
 
     // start frame duration timer
     m_frameTimer.Start();
@@ -183,9 +185,12 @@ Particles::~Particles()
 {
     delete m_pCompute;
     delete m_pRender;
+
+#if IMGUI_ENABLED
     ImGui_ImplDX12_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext(nullptr);
+#endif
 }
 
 
