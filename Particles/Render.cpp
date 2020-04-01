@@ -308,11 +308,8 @@ void Render::CreateSwapChain()
     else
     {
         BOOL allowTearing = FALSE;
-        factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &allowTearing, sizeof(allowTearing));
-        if (allowTearing)
-        {
-            m_windowedSupportsTearing = true;
-        }
+        const HRESULT result = factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &allowTearing, sizeof(allowTearing));
+        m_windowedSupportsTearing = SUCCEEDED(result) && allowTearing;
     }
 
     // Describe and create the swap chain.
