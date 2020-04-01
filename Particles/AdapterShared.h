@@ -47,8 +47,7 @@ public:
     AdapterShared& operator=(const AdapterShared&) = delete;
     AdapterShared& operator=(AdapterShared&&) = delete;
 
-    // return GPU timers
-    auto& GetGpuTimes() const { return m_pTimer->GetTimes(); }
+    const auto& GetGpuTimes() const { return m_pTimer->GetTimes(); }
 
     // return if this adapter is using the intel command queue throttle extension
     bool GetUsingIntelCommandQueueExtension() const { return m_usingIntelCommandQueueExtension; }

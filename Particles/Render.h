@@ -69,7 +69,7 @@ public:
     //-----------------------------------------------------
 
     HANDLE GetSharedFenceHandle() const { return m_sharedFenceHandle; }
-    void SetShared(Compute::SharedHandles in_sharedHandles);
+    void SetShared(const Compute::SharedHandles& in_sharedHandles);
 
     struct Particle
     {

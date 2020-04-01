@@ -130,16 +130,16 @@ void Compute::CreateSharedBuffers()
 
     const UINT dataSize = m_numParticles * sizeof(Render::Particle);
 
-    D3D12_RESOURCE_DESC crossAdapterDesc = CD3DX12_RESOURCE_DESC::Buffer(dataSize,
+    const D3D12_RESOURCE_DESC crossAdapterDesc = CD3DX12_RESOURCE_DESC::Buffer(dataSize,
         D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS |
         D3D12_RESOURCE_FLAG_ALLOW_CROSS_ADAPTER);
 
-    D3D12_RESOURCE_ALLOCATION_INFO textureInfo =
+    const D3D12_RESOURCE_ALLOCATION_INFO textureInfo =
         m_device->GetResourceAllocationInfo(0, 1, &crossAdapterDesc);
 
-    UINT64 alignedDataSize = textureInfo.SizeInBytes;
+    const UINT64 alignedDataSize = textureInfo.SizeInBytes;
 
-    CD3DX12_HEAP_DESC heapDesc(
+    const CD3DX12_HEAP_DESC heapDesc(
         m_NUM_BUFFERS * alignedDataSize,
         D3D12_HEAP_TYPE_DEFAULT,
         0, // An alias for 64KB. See documentation for D3D12_HEAP_DESC
@@ -174,11 +174,11 @@ void Compute::CreateSharedBuffers()
             nullptr,
             IID_PPV_ARGS(&m_positionBuffers[i])));
 
-        CD3DX12_CPU_DESCRIPTOR_HANDLE heapHandle(
+        const CD3DX12_CPU_DESCRIPTOR_HANDLE heapHandle(
             m_srvHeap->GetCPUDescriptorHandleForHeapStart(),
-            UavParticlePos0 + i, m_srvUavDescriptorSize);
-        m_device->CreateUnorderedAccessView(m_positionBuffers[i].Get(),
-            nullptr, &uavDesc, heapHandle);
+            UavParticlePos0 + i,
+            m_srvUavDescriptorSize);
+        m_device->CreateUnorderedAccessView(m_positionBuffers[i].Get(), nullptr, &uavDesc, heapHandle);
 
         ThrowIfFailed(m_device->CreateCommittedResource(
             &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
@@ -188,14 +188,17 @@ void Compute::CreateSharedBuffers()
             nullptr,
             IID_PPV_ARGS(&m_velocityBuffers[i])));
 
-        CD3DX12_CPU_DESCRIPTOR_HANDLE velHeapHandle(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), UavParticleVel0 + i, m_srvUavDescriptorSize);
+        const CD3DX12_CPU_DESCRIPTOR_HANDLE velHeapHandle(
+            m_srvHeap->GetCPUDescriptorHandleForHeapStart(),
+            UavParticleVel0 + i,
+            m_srvUavDescriptorSize);
         m_device->CreateUnorderedAccessView(m_velocityBuffers[i].Get(), nullptr, &velocityDesc, velHeapHandle);
     }
 
-    CD3DX12_CPU_DESCRIPTOR_HANDLE copyPosHandle(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), UavParticlePos0Copy, m_srvUavDescriptorSize);
+    const CD3DX12_CPU_DESCRIPTOR_HANDLE copyPosHandle(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), UavParticlePos0Copy, m_srvUavDescriptorSize);
     m_device->CreateUnorderedAccessView(m_positionBuffers[0].Get(), nullptr, &uavDesc, copyPosHandle);
 
-    CD3DX12_CPU_DESCRIPTOR_HANDLE copyVelHandle(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), UavParticleVel0Copy, m_srvUavDescriptorSize);
+    const CD3DX12_CPU_DESCRIPTOR_HANDLE copyVelHandle(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), UavParticleVel0Copy, m_srvUavDescriptorSize);
     m_device->CreateUnorderedAccessView(m_velocityBuffers[0].Get(), nullptr, &velocityDesc, copyVelHandle);
 }
 
@@ -433,19 +436,19 @@ void Compute::Initialize(ComPtr<IDXGIAdapter1> in_adapter)
 
 #if defined(_DEBUG)
         // Enable better shader debugging with the graphics debugging tools.
-        UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+        const UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
 #else
-        UINT compileFlags = 0;
+        const UINT compileFlags = 0;
 #endif
 
         // Load and compile shaders.
-        D3D_SHADER_MACRO macros[] = { { "blocksize", STRINGIFY(BLOCK_SIZE) }, { NULL, NULL} };
         ID3DBlob* pErrorMsgs = 0;
+        const D3D_SHADER_MACRO macros[] = { { "blocksize", STRINGIFY(BLOCK_SIZE) }, { nullptr, nullptr} };
 
         const wchar_t* pShaderName = L"NBodyGravityCS.hlsl";
         const std::wstring fullShaderPath = GetAssetFullPath(pShaderName);
 
-        HRESULT hr = ::D3DCompileFromFile(fullShaderPath.c_str(), macros, nullptr, "CSMain", "cs_5_0", compileFlags, 0, &computeShader, &pErrorMsgs);
+        const HRESULT hr = ::D3DCompileFromFile(fullShaderPath.c_str(), macros, nullptr, "CSMain", "cs_5_0", compileFlags, 0, &computeShader, &pErrorMsgs);
         if (FAILED(hr))
         {
             char* pMessage = (char*)pErrorMsgs->GetBufferPointer();
@@ -570,7 +573,7 @@ void Compute::InitializeParticles()
     velocities.resize(m_numParticles);
 
     // Split the particles into two groups.
-    float centerSpread = ParticleSpread * 0.750f;
+    const float centerSpread = ParticleSpread * 0.750f;
     LoadParticles(
         &positions[0], &velocities[0],
         XMFLOAT3(centerSpread, 0, 0),
@@ -588,8 +591,8 @@ void Compute::InitializeParticles()
     // upload positions
     //-------------------------------------------------------------------------
     const UINT dataSize = m_numParticles * sizeof(Render::Particle);
-    D3D12_HEAP_PROPERTIES uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-    D3D12_RESOURCE_DESC uploadBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(dataSize);
+    const D3D12_HEAP_PROPERTIES uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+    const D3D12_RESOURCE_DESC uploadBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(dataSize);
 
     ComPtr<ID3D12Resource> particleBufferUpload;
     ThrowIfFailed(m_device->CreateCommittedResource(
@@ -626,8 +629,9 @@ void Compute::InitializeParticles()
     //-------------------------------------------------------------------------
     // upload velocities
     //-------------------------------------------------------------------------
-    UINT64 velocityBufferSize = m_numParticles * sizeof(ParticleVelocity);
-    D3D12_RESOURCE_DESC velocityBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(velocityBufferSize);
+    const UINT64 velocityBufferSize = m_numParticles * sizeof(ParticleVelocity);
+    const D3D12_RESOURCE_DESC velocityBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(velocityBufferSize);
+
     ComPtr<ID3D12Resource> velocityBufferUpload;
     ThrowIfFailed(m_device->CreateCommittedResource(
         &uploadHeapProperties,
@@ -682,7 +686,7 @@ void Compute::WaitForGpu()
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-Compute::SharedHandles Compute::GetSharedHandles(HANDLE in_fenceHandle)
+const Compute::SharedHandles& Compute::GetSharedHandles(HANDLE in_fenceHandle)
 {
     assert(m_sharedFence == nullptr);
     ThrowIfFailed(m_device->OpenSharedHandle(in_fenceHandle, IID_PPV_ARGS(&m_sharedFence)));
@@ -724,7 +728,7 @@ void Compute::Simulate(int in_numActiveParticles, UINT64 in_sharedFenceValue)
 
     m_pTimer->BeginTimer(m_commandList.Get(), static_cast<std::uint32_t>(GpuTimers::Simulate));
 
-    UINT srcHeapIndex = UavParticlePos0 + oldIndex; // 0 or 1
+    const UINT srcHeapIndex = UavParticlePos0 + oldIndex; // 0 or 1
 
     ID3D12DescriptorHeap* ppHeaps[] = { m_srvHeap.Get() };
     m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);

@@ -57,7 +57,7 @@ public:
         UINT64 m_alignedDataSize;
         UINT m_bufferIndex;
     };
-    SharedHandles GetSharedHandles(HANDLE in_fenceHandle);
+    const SharedHandles& GetSharedHandles(HANDLE in_fenceHandle);
 
     UINT64 GetFenceValue() const { return m_fenceValue; }
 

@@ -372,8 +372,8 @@ void Particles::Draw()
     }
 
     // host-side frame time
-    float currentFrameTime = (float)m_frameTimer.GetTime();
-    float frameTime = 1000.0f * (currentFrameTime - m_previousFrameTime);
+    const float currentFrameTime = (float)m_frameTimer.GetTime();
+    const float frameTime = 1000.0f * (currentFrameTime - m_previousFrameTime);
     m_previousFrameTime = currentFrameTime;
     const std::uint32_t AVERAGE_OVER = 20;
     m_frameTime *= (AVERAGE_OVER - 1);

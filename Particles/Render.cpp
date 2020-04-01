@@ -211,7 +211,7 @@ Render::~Render()
     }
     if (m_pConstantBufferGSData)
     {
-        CD3DX12_RANGE readRange(0, 0);
+        const CD3DX12_RANGE readRange(0, 0);
         m_constantBufferGS->Unmap(0, &readRange);
         m_pConstantBufferGSData = 0;
     }
@@ -228,7 +228,7 @@ Render::~Render()
 //-----------------------------------------------------------------------------
 // get handles to textures the simulation results will be copied to
 //-----------------------------------------------------------------------------
-void Render::SetShared(Compute::SharedHandles in_sharedHandles)
+void Render::SetShared(const Compute::SharedHandles& in_sharedHandles)
 {
     m_sharedBufferIndex = in_sharedHandles.m_bufferIndex;
 
@@ -237,7 +237,7 @@ void Render::SetShared(Compute::SharedHandles in_sharedHandles)
 
     ThrowIfFailed(m_device->OpenSharedHandle(in_sharedHandles.m_fence, IID_PPV_ARGS(&m_sharedComputeFence)));
 
-    D3D12_RESOURCE_DESC crossAdapterDesc = CD3DX12_RESOURCE_DESC::Buffer(in_sharedHandles.m_alignedDataSize,
+    const D3D12_RESOURCE_DESC crossAdapterDesc = CD3DX12_RESOURCE_DESC::Buffer(in_sharedHandles.m_alignedDataSize,
         D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS |
         D3D12_RESOURCE_FLAG_ALLOW_CROSS_ADAPTER);
 
@@ -495,9 +495,9 @@ void Render::LoadAssets()
 
 #if defined(_DEBUG)
         // Enable better shader debugging with the graphics debugging tools.
-        UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+        const UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
 #else
-        UINT compileFlags = 0;
+        const UINT compileFlags = 0;
 #endif
 
         // Load and compile shaders.
@@ -510,7 +510,7 @@ void Render::LoadAssets()
         ThrowIfFailed(::D3DCompileFromFile(fullShaderPath.c_str(), nullptr, nullptr, "GSParticleDraw", "gs_5_0", compileFlags, 0, &geometryShader, &pErrorMsgs));
         ThrowIfFailed(::D3DCompileFromFile(fullShaderPath.c_str(), nullptr, nullptr, "PSParticleDraw", "ps_5_0", compileFlags, 0, &pixelShader, &pErrorMsgs));
 
-        D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
+        const D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
         {
             { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
@@ -571,7 +571,7 @@ void Render::LoadAssets()
 
         NAME_D3D12_OBJECT(m_constantBufferGS);
 
-        CD3DX12_RANGE readRange(0, 0);        // We do not intend to read from this resource on the CPU.
+        const CD3DX12_RANGE readRange(0, 0);        // We do not intend to read from this resource on the CPU.
         ThrowIfFailed(m_constantBufferGS->Map(0, &readRange, reinterpret_cast<void**>(&m_pConstantBufferGSData)));
         ZeroMemory(m_pConstantBufferGSData, constantBufferGSSize);
     }
@@ -851,7 +851,7 @@ HANDLE Render::Draw(int in_numActiveParticles, Particles* in_pParticles, UINT64&
     m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex].Get(),
         D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
 
-    CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
+    const CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
     m_commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
 
     m_commandList->RSSetViewports(1, &m_viewport);
@@ -869,7 +869,7 @@ HANDLE Render::Draw(int in_numActiveParticles, Particles* in_pParticles, UINT64&
     ID3D12Resource* pResource = m_buffers[m_currentBufferIndex].Get();
     m_currentBufferIndex = 1 - m_currentBufferIndex;
 
-    CD3DX12_GPU_DESCRIPTOR_HANDLE srvHandle(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), srvIndex, m_srvUavDescriptorSize);
+    const CD3DX12_GPU_DESCRIPTOR_HANDLE srvHandle(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), srvIndex, m_srvUavDescriptorSize);
     m_commandList->SetGraphicsRootDescriptorTable(GraphicsRootSRVTable, srvHandle);
 
     // draw things
