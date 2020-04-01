@@ -432,6 +432,8 @@ void Compute::Initialize(ComPtr<IDXGIAdapter1> in_adapter)
 
     // Create the pipeline states, which includes compiling and loading shaders.
     {
+        // Load and compile shaders.
+        ID3DBlob* pErrorMsgs = nullptr;
         ComPtr<ID3DBlob> computeShader;
 
 #if defined(_DEBUG)
@@ -441,8 +443,6 @@ void Compute::Initialize(ComPtr<IDXGIAdapter1> in_adapter)
         const UINT compileFlags = 0;
 #endif
 
-        // Load and compile shaders.
-        ID3DBlob* pErrorMsgs = 0;
         const D3D_SHADER_MACRO macros[] = { { "blocksize", STRINGIFY(BLOCK_SIZE) }, { nullptr, nullptr} };
 
         const wchar_t* pShaderName = L"NBodyGravityCS.hlsl";
@@ -451,9 +451,15 @@ void Compute::Initialize(ComPtr<IDXGIAdapter1> in_adapter)
         const HRESULT hr = ::D3DCompileFromFile(fullShaderPath.c_str(), macros, nullptr, "CSMain", "cs_5_0", compileFlags, 0, &computeShader, &pErrorMsgs);
         if (FAILED(hr))
         {
-            char* pMessage = (char*)pErrorMsgs->GetBufferPointer();
+            if (pErrorMsgs != nullptr)
+            {
+                char* pMessage = (char*)pErrorMsgs->GetBufferPointer();
+                ::OutputDebugStringA(pMessage);
+                pErrorMsgs->Release();
+            }            
             ThrowIfFailed(hr);
         }
+
         // Describe and create the compute pipeline state object (PSO).
         D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
         computePsoDesc.pRootSignature = m_rootSignature.Get();
