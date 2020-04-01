@@ -24,6 +24,7 @@
 //
 //*********************************************************
 
+#include <string>
 #include <sstream>
 #include <D3Dcompiler.h>
 
@@ -92,13 +93,15 @@ bool Render::GetSupportsIntelCommandQueueExtension() const
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-std::wstring GetAssetFullPath(const std::wstring in_filename)
+std::wstring GetAssetFullPath(const wchar_t* const in_filename)
 {
     constexpr size_t PATHBUFFERSIZE = MAX_PATH * 4;
     TCHAR buffer[PATHBUFFERSIZE];
-    GetCurrentDirectory(_countof(buffer), buffer);
-    std::wstring directory = buffer;
-    return directory + L"\\\\" + in_filename;
+    ::GetCurrentDirectory(_countof(buffer), buffer);
+
+    std::wostringstream assetFullPath;
+    assetFullPath << buffer << L"\\\\" << in_filename;
+    return assetFullPath.str();
 }
 
 // Indices of shader resources in the descriptor heap.
@@ -467,11 +470,11 @@ void Render::LoadAssets()
             ThrowIfFailed(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_commandAllocators[i])));
             ThrowIfFailed(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COPY, IID_PPV_ARGS(&m_copyAllocators[i])));
 
-            std::wstringstream cmdAllocName;
+            std::wostringstream cmdAllocName;
             cmdAllocName << "Render CmdAlloc " << i;
             m_commandAllocators[i]->SetName(cmdAllocName.str().c_str());
 
-            std::wstringstream copyAllocName;
+            std::wostringstream copyAllocName;
             copyAllocName << "Copy CmdAlloc " << i;
             m_copyAllocators[i]->SetName(copyAllocName.str().c_str());
         }
@@ -494,11 +497,13 @@ void Render::LoadAssets()
 
         // Load and compile shaders.
         ID3DBlob* pErrorMsgs = 0;
+        // all shaders in same file
         const wchar_t* pShaderName = L"ParticleDraw.hlsl";
+        const std::wstring fullShaderPath = GetAssetFullPath(pShaderName);
 
-        ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(pShaderName).c_str(), nullptr, nullptr, "VSParticleDraw", "vs_5_0", compileFlags, 0, &vertexShader, &pErrorMsgs));
-        ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(pShaderName).c_str(), nullptr, nullptr, "GSParticleDraw", "gs_5_0", compileFlags, 0, &geometryShader, &pErrorMsgs));
-        ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(pShaderName).c_str(), nullptr, nullptr, "PSParticleDraw", "ps_5_0", compileFlags, 0, &pixelShader, &pErrorMsgs));
+        ThrowIfFailed(::D3DCompileFromFile(fullShaderPath.c_str(), nullptr, nullptr, "VSParticleDraw", "vs_5_0", compileFlags, 0, &vertexShader, &pErrorMsgs));
+        ThrowIfFailed(::D3DCompileFromFile(fullShaderPath.c_str(), nullptr, nullptr, "GSParticleDraw", "gs_5_0", compileFlags, 0, &geometryShader, &pErrorMsgs));
+        ThrowIfFailed(::D3DCompileFromFile(fullShaderPath.c_str(), nullptr, nullptr, "PSParticleDraw", "ps_5_0", compileFlags, 0, &pixelShader, &pErrorMsgs));
 
         D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
         {

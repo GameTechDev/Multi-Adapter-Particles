@@ -25,6 +25,7 @@
 //*********************************************************
 
 #include <random>
+#include <string>
 #include <sstream>
 #include <ppl.h>
 #include <D3Dcompiler.h>
@@ -70,7 +71,7 @@ enum class GpuTimers
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 // FIXME: shared functions go in a header?
-extern std::wstring GetAssetFullPath(const std::wstring in_filename);
+extern std::wstring GetAssetFullPath(const wchar_t* const in_filename);
 
 //-----------------------------------------------------------------------------
 // creates a command queue with the intel extension if available
@@ -360,7 +361,7 @@ void Compute::SetAdapter(ComPtr<IDXGIAdapter1> in_adapter)
     for (UINT i = 0; i < m_NUM_BUFFERS; i++)
     {
         ThrowIfFailed(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COMPUTE, IID_PPV_ARGS(&m_commandAllocators[i])));
-        std::wstringstream cmdAllocName;
+        std::wostringstream cmdAllocName;
         cmdAllocName << "Compute CmdAlloc " << i;
         m_commandAllocators[i]->SetName(cmdAllocName.str().c_str());
     }
@@ -435,13 +436,12 @@ void Compute::Initialize(ComPtr<IDXGIAdapter1> in_adapter)
         ID3DBlob* pErrorMsgs = 0;
 
         const wchar_t* pShaderName = L"NBodyGravityCS.hlsl";
+        const std::wstring fullShaderPath = GetAssetFullPath(pShaderName);
 
-        //ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(pShaderName).c_str(), macros, nullptr, "CSMain", "cs_5_0", compileFlags, 0, &computeShader, &pErrorMsgs));
-        HRESULT hr = D3DCompileFromFile(GetAssetFullPath(pShaderName).c_str(), macros, nullptr, "CSMain", "cs_5_0", compileFlags, 0, &computeShader, &pErrorMsgs);
-        char* pMessage = 0;
+        HRESULT hr = ::D3DCompileFromFile(fullShaderPath.c_str(), macros, nullptr, "CSMain", "cs_5_0", compileFlags, 0, &computeShader, &pErrorMsgs);
         if (FAILED(hr))
         {
-            pMessage = (char*)pErrorMsgs->GetBufferPointer();
+            char* pMessage = (char*)pErrorMsgs->GetBufferPointer();
             ThrowIfFailed(hr);
         }
         // Describe and create the compute pipeline state object (PSO).
