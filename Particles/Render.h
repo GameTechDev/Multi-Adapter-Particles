@@ -30,6 +30,8 @@
 #include "SimpleCamera.h"
 #include "Compute.h" // for shared handles structure
 
+class ExtensionHelper;
+
 class Render : public AdapterShared
 {
 public:
@@ -83,7 +85,7 @@ private:
     static constexpr std::uint32_t NUM_FRAMES = 2;
     const UINT m_numParticles;
 
-    class ExtensionHelper* m_pExtensionHelper;
+    ExtensionHelper* m_pExtensionHelper;
     HWND m_hwnd;
     ComPtr<IDXGIAdapter1> m_adapter;
     ComPtr<ID3D12Device> m_device;

@@ -35,8 +35,6 @@
 #include "Render.h" // for struct Particle
 #include "ExtensionHelper.h" // Intel extensions
 
-const float Compute::ParticleSpread = PARTICLE_SPREAD;
-
 enum ComputeRootParameters : UINT32
 {
     ComputeRootCBV = 0,
@@ -207,13 +205,16 @@ void Compute::CreateSharedBuffers()
 Compute::Compute(UINT in_numParticles,
     ComPtr<IDXGIAdapter1> in_adapter,
     bool in_useIntelCommandQueueExtension,
-    Compute* in_pCompute) :
-    m_numParticles(in_numParticles),
-    m_frameFenceValues{}
+    Compute* in_pCompute)
+    : m_numParticles(in_numParticles)
+    , m_pExtensionHelper(nullptr)
+    , m_srvUavDescriptorSize(0)
+    , m_fenceEvent(nullptr)
+    , m_bufferIndex(0)
+    , m_frameFenceValues{}
+    , m_fenceValue(0)
 {
-    m_bufferIndex = 0;
     m_usingIntelCommandQueueExtension = in_useIntelCommandQueueExtension;
-    m_fenceValue = 0;
 
     Initialize(in_adapter);
 

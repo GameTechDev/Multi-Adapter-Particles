@@ -70,19 +70,31 @@ void Particles::ShareHandles()
 // save info so roles can be dynamically changed
 //-----------------------------------------------------------------------------
 Particles::Particles(HWND in_hwnd)
+    : m_hwnd(in_hwnd)
+
+    , m_pRender(nullptr)
+    , m_pCompute(nullptr)
+
+    , m_renderAdapterIndex(-1)
+    , m_computeAdapterIndex(-1)
+
+    , m_commandQueueExtensionEnabled(false)
+    , m_vsyncEnabled(true)
+    , m_fullScreen(false)
+
+    , m_height(0)
+
+    , m_previousFrameTime(0.f)
+    , m_frameTime(0.f)
+
+    , m_particleSize(INITIAL_PARTICLE_SIZE)
+    , m_particleIntensity(INITIAL_PARTICLE_INTENSITY)
+
+    , m_numParticlesRendered(ParticleCount)
+    , m_numParticlesCopied(ParticleCount)
+    , m_numParticlesSimulated(ParticleCount)
+    , m_numParticlesLinked(true)
 {
-    m_hwnd = in_hwnd;
-    m_vsyncEnabled = true;
-    m_fullScreen = false;
-    m_frameTime = 0;
-    m_particleSize = INITIAL_PARTICLE_SIZE;
-    m_particleIntensity = INITIAL_PARTICLE_INTENSITY;
-
-    m_numParticlesRendered = ParticleCount;
-    m_numParticlesCopied = ParticleCount;
-    m_numParticlesSimulated = ParticleCount;
-    m_numParticlesLinked = true;
-
     m_windowInfo.cbSize = sizeof(WINDOWINFO);
     ::GetWindowInfo(m_hwnd, &m_windowInfo);
 

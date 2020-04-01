@@ -168,22 +168,33 @@ void Render::SetUseIntelCommandQueueExtension(bool in_desiredSetting)
 Render::Render(HWND in_hwnd, UINT in_numParticles,
     ComPtr<IDXGIAdapter1> in_adapter,
     bool in_useIntelCommandQueueExtension,
-    bool in_fullScreen, RECT in_windowDim) :
-    m_numParticles(in_numParticles),
-    m_frameFenceValues{}
+    bool in_fullScreen, RECT in_windowDim)
+    : m_numParticles(in_numParticles)
+    , m_pExtensionHelper(nullptr)
+    , m_hwnd(in_hwnd)
+    , m_adapter(in_adapter)
+    , m_frameIndex(0)
+    , m_swapChainEvent(nullptr)
+    , m_frameFenceValues{}
+    , m_renderFenceValue(0)
+    , m_renderFenceEvent(nullptr)
+    , m_rtvDescriptorSize(0)
+    , m_srvUavDescriptorSize(0)
+    , m_bufferSize(0)
+    , m_currentBufferIndex(0)
+    , m_pConstantBufferGSData(nullptr)
+    , m_aspectRatio(0.f)
+    , m_copyFenceValue(0)
+    , m_sharedBufferIndex(0)
+    , m_fullScreen(in_fullScreen)
+    , m_windowedSupportsTearing(false)
+    , m_windowDim(in_windowDim)
+    , m_sharedFenceHandle(nullptr)
+    , m_particleSize(0.f)
+    , m_particleIntensity(0.f)
 {
-    m_hwnd = in_hwnd;
-    m_pConstantBufferGSData = 0;
     m_camera.Init({ 0.0f, 0.0f, 1500.0f });
     m_camera.SetMoveSpeed(250.0f);
-    m_currentBufferIndex = 0;
-    m_adapter = in_adapter;
-    m_fullScreen = in_fullScreen;
-    m_windowDim = in_windowDim;
-    m_renderFenceValue = 0;
-    m_windowedSupportsTearing = false;
-    m_particleSize = 0;
-    m_particleIntensity = 0;
 
     CreateDevice(in_adapter.Get(), m_device);
 

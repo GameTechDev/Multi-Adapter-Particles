@@ -28,6 +28,8 @@
 #include "AdapterShared.h"
 #include <DirectXMath.h>
 
+class ExtensionHelper;
+
 class Compute : public AdapterShared
 {
 public:
@@ -72,10 +74,10 @@ public:
 private:
     static constexpr UINT m_NUM_BUFFERS = 2;
 
-    static const float ParticleSpread;
+    static constexpr float ParticleSpread = PARTICLE_SPREAD;
     const UINT m_numParticles;
 
-    class ExtensionHelper* m_pExtensionHelper;
+    ExtensionHelper* m_pExtensionHelper;
 
     ComPtr<IDXGIAdapter1> m_adapter;
     ComPtr<ID3D12Device> m_device;
