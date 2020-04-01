@@ -24,6 +24,7 @@
 //
 //*********************************************************
 
+#include <cassert>
 #include <random>
 #include <string>
 #include <sstream>
@@ -232,8 +233,14 @@ Compute::~Compute()
     WaitForGpu();
     delete m_pExtensionHelper;
 
-    CloseHandle(m_sharedHandles.m_heap);
-    CloseHandle(m_sharedHandles.m_fence);
+    BOOL rv = ::CloseHandle(m_sharedHandles.m_heap);
+    assert(rv != FALSE);
+
+    rv = ::CloseHandle(m_sharedHandles.m_fence);
+    assert(rv != FALSE);
+
+    rv = ::CloseHandle(m_fenceEvent);
+    assert(rv != FALSE);
 }
 
 //-----------------------------------------------------------------------------

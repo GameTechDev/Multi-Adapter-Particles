@@ -24,6 +24,7 @@
 //
 //*********************************************************
 
+#include <cassert>
 #include <string>
 #include <sstream>
 #include <D3Dcompiler.h>
@@ -215,7 +216,11 @@ Render::~Render()
         m_pConstantBufferGSData = 0;
     }
 
-    CloseHandle(m_sharedFenceHandle);
+    BOOL rv = ::CloseHandle(m_sharedFenceHandle);
+    assert(rv != FALSE);
+
+    rv = ::CloseHandle(m_renderFenceEvent);
+    assert(rv != FALSE);
 
     delete m_pExtensionHelper;
 }
