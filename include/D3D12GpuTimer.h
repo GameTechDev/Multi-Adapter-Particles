@@ -25,13 +25,15 @@
 //*********************************************************
 #pragma once
 
-#include <cstdint>
 #include <d3d12.h>
-#include <d3dx12.h>
 #include <wrl.h>
+
+#include <cstdint>
 #include <vector>
 #include <string>
+#include <utility>
 
+#include "d3dx12.h"
 #include "DXSampleHelper.h"
 
 class D3D12GpuTimer
@@ -42,7 +44,7 @@ public:
         ID3D12CommandQueue* in_pCommandQueue, // required for frequency query
         std::uint32_t in_numTimers, std::uint32_t in_averageOver = 20);
 
-    void SetTimerName(std::uint32_t in_index, std::string in_name);
+    void SetTimerName(std::uint32_t in_index, const std::string& in_name);
 
     void BeginTimer(ID3D12GraphicsCommandList* in_pCommandList, std::uint32_t in_index);
     void EndTimer(ID3D12GraphicsCommandList* in_pCommandList, std::uint32_t in_index);
@@ -51,6 +53,7 @@ public:
 
     typedef std::vector<std::pair<float, std::string>> TimeArray;
     const TimeArray& GetTimes() const { return m_times; }
+
 private:
     std::uint32_t m_numTimers;   // how many we expose. we need double to record begin + end
     std::uint32_t m_totalTimers;
@@ -69,14 +72,16 @@ inline D3D12GpuTimer::D3D12GpuTimer(
     ID3D12Device* in_pDevice,
     ID3D12CommandQueue* in_pCommandQueue,
     std::uint32_t in_numTimers,
-    std::uint32_t in_averageOver) : m_averageOver(in_averageOver)
+    std::uint32_t in_averageOver)
+    : m_numTimers(in_numTimers)
+    , m_totalTimers(in_numTimers * 2) // begin + end, so we can take a difference
+    , m_gpuFrequency(0)
+    , m_averageOver(in_averageOver)
+    , m_commandQueue(in_pCommandQueue)
 {
-    m_commandQueue = in_pCommandQueue;
-    m_numTimers = in_numTimers;
-    m_totalTimers = m_numTimers * 2; // begin + end, so we can take a difference
-
     m_times.resize(m_numTimers);
-    UINT64 bufferSize = m_totalTimers * sizeof(UINT64);
+
+    const UINT64 bufferSize = m_totalTimers * sizeof(UINT64);
 
     ThrowIfFailed(in_pDevice->CreateCommittedResource(
         &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_READBACK),
@@ -85,7 +90,6 @@ inline D3D12GpuTimer::D3D12GpuTimer(
         D3D12_RESOURCE_STATE_COPY_DEST,
         nullptr,
         IID_PPV_ARGS(&m_buffer)));
-
     m_buffer->SetName(L"GPUTimeStamp Buffer");
 
     D3D12_QUERY_HEAP_DESC QueryHeapDesc = {};
@@ -100,7 +104,7 @@ inline D3D12GpuTimer::D3D12GpuTimer(
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-inline void D3D12GpuTimer::SetTimerName(std::uint32_t in_index, std::string in_name)
+inline void D3D12GpuTimer::SetTimerName(std::uint32_t in_index, const std::string& in_name)
 {
     if (in_index < m_times.size())
     {
@@ -112,7 +116,7 @@ inline void D3D12GpuTimer::SetTimerName(std::uint32_t in_index, std::string in_n
 //-----------------------------------------------------------------------------
 inline void D3D12GpuTimer::BeginTimer(ID3D12GraphicsCommandList* in_pCommandList, std::uint32_t in_index)
 {
-    UINT index = in_index * 2;
+    const UINT index = in_index * 2;
     in_pCommandList->EndQuery(m_heap.Get(), D3D12_QUERY_TYPE_TIMESTAMP, index);
 }
 
@@ -120,7 +124,7 @@ inline void D3D12GpuTimer::BeginTimer(ID3D12GraphicsCommandList* in_pCommandList
 //-----------------------------------------------------------------------------
 inline void D3D12GpuTimer::EndTimer(ID3D12GraphicsCommandList* in_pCommandList, std::uint32_t in_index)
 {
-    UINT index = (in_index * 2) + 1;
+    const UINT index = (in_index * 2) + 1;
     in_pCommandList->EndQuery(m_heap.Get(), D3D12_QUERY_TYPE_TIMESTAMP, index);
 }
 
@@ -144,8 +148,8 @@ inline void D3D12GpuTimer::ResolveAllTimers(ID3D12GraphicsCommandList* in_pComma
             deltaTime = pTimestamps[0] - pTimestamps[1];
         }
 
-        float delta = float(deltaTime) / float(m_gpuFrequency);
-        float t = m_times[i].first * (m_averageOver - 1);
+        const float delta = float(deltaTime) / float(m_gpuFrequency);
+        const float t = m_times[i].first * (m_averageOver - 1);
         m_times[i].first = (t + delta) / m_averageOver;
 
         pTimestamps += 2;

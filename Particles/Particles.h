@@ -25,27 +25,35 @@
 //*********************************************************
 #pragma once
 
+#include "WindowProc.h"
+
 #include <wrl.h>
 #include <dxgi1_6.h>
+#include <d3d12.h>
+
+#include <cstdint>
 #include <vector>
 #include <string>
 
-#include "Render.h"
-#include "Compute.h"
 #include "Timer.h"
+
+class Render;
+class Compute;
+
+using Microsoft::WRL::ComPtr;
 
 class Particles
 {
 public:
-    Particles(HWND in_hwnd);
+    explicit Particles(HWND in_hwnd);
     ~Particles();
 
     void Draw();
     void DrawGUI(ID3D12GraphicsCommandList* in_pCommandList);
-    bool GetVsyncEnabled() { return m_vsyncEnabled; }
+    bool GetVsyncEnabled() const { return m_vsyncEnabled; }
 
-    // stop any threads
     void Shutdown();
+
 private:
     HWND m_hwnd;
 
@@ -59,12 +67,11 @@ private:
     bool m_fullScreen;
 
     // used to create device & resize swap chain
-    Microsoft::WRL::ComPtr<IDXGIFactory4> m_dxgiFactory;
-    std::vector< Microsoft::WRL::ComPtr<IDXGIAdapter1> > m_adapters;
+    ComPtr<IDXGIFactory2> m_dxgiFactory;
+    std::vector< ComPtr<IDXGIAdapter1> > m_adapters;
     std::vector<std::string> m_adapterDescriptions;
     std::vector<const char*> m_adapterDescriptionPtrs;
 
-    std::uint32_t m_width;
     std::uint32_t m_height;
 
     Timer m_frameTimer;

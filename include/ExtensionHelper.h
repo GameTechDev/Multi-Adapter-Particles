@@ -24,27 +24,35 @@
 //
 //*********************************************************
 #pragma once
+
+#include <cassert>
 #include <d3d12.h>
 #include <dxgi1_6.h>
 
 #include "DXSampleHelper.h"
 #include "igd12ext.h"
 
+constexpr UINT INTEL_DEVICE_ID = 0x8086;
+
 class ExtensionHelper
 {
 public:
-    ExtensionHelper(ID3D12Device* in_pDevice);
+    explicit ExtensionHelper(ID3D12Device* in_pDevice);
     ~ExtensionHelper();
+
+    ExtensionHelper(const ExtensionHelper&) = delete;
+    ExtensionHelper(ExtensionHelper&&) = delete;
+    ExtensionHelper& operator=(const ExtensionHelper&) = delete;
+    ExtensionHelper& operator=(ExtensionHelper&&) = delete;
 
     ID3D12CommandQueue* CreateCommandQueue(D3D12_COMMAND_QUEUE_DESC in_queueDesc);
 
     bool GetEnabled() const { return (nullptr != m_pExtensionContext); }
-private:
-    ID3D12Device* m_pDevice;
 
-    INTC::PFNINTCDX12EXT_CREATECOMMANDQUEUE m_extCreateCommandQueue;
+private:
     HMODULE m_extendionsHandle;
     INTC::ExtensionContext* m_pExtensionContext;
+    INTC::PFNINTCDX12EXT_CREATECOMMANDQUEUE m_extCreateCommandQueue;
 
     void ReleaseExtensions();
 };
@@ -52,41 +60,49 @@ private:
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 inline ExtensionHelper::ExtensionHelper(ID3D12Device* in_pDevice)
+    : m_extendionsHandle(nullptr)
+    , m_pExtensionContext(nullptr)
+    , m_extCreateCommandQueue(nullptr)
 {
-    m_pDevice = in_pDevice;
-
-    m_extendionsHandle = INTC::D3D12LoadIntelExtensionsLibrary();
-    m_pExtensionContext = nullptr;
-    m_extCreateCommandQueue = nullptr;
-
     // Check that this is a Intel device first.  Calling
     // CreateExtensionContext() on non-Intel devices can lead to issues
 
     bool intelDevice = false;
-    {
-        LUID deviceLuid = in_pDevice->GetAdapterLuid();
 
-        IDXGIFactory* factory = nullptr;
-        ThrowIfFailed(CreateDXGIFactory(IID_PPV_ARGS(&factory)));
+    {
+        const LUID deviceLuid = in_pDevice->GetAdapterLuid();
+
+        UINT flags = 0;
+#ifdef _DEBUG
+        flags |= DXGI_CREATE_FACTORY_DEBUG;
+#endif
+
+        IDXGIFactory2* factory2 = nullptr;
+        ThrowIfFailed(::CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory2)));
+
         IDXGIAdapter* adapter = nullptr;
-        for (UINT i = 0; factory->EnumAdapters(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
+        for (UINT i = 0; factory2->EnumAdapters(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
         {
             DXGI_ADAPTER_DESC desc;
-            adapter->GetDesc(&desc);
+            ThrowIfFailed(adapter->GetDesc(&desc));
             adapter->Release();
 
             if (desc.AdapterLuid.HighPart == deviceLuid.HighPart &&
                 desc.AdapterLuid.LowPart == deviceLuid.LowPart)
             {
-                intelDevice = (desc.VendorId == 0x8086);
+                intelDevice = (desc.VendorId == INTEL_DEVICE_ID);
                 break;
             }
         }
+
+        SAFE_RELEASE(factory2);
     }
 
     if (intelDevice)
     {
-        auto CreateExtensionContext = (INTC::PFNINTCDX12EXT_D3D12CREATEDEVICEEXTENSIONCONTEXT) GetProcAddress(m_extendionsHandle, "D3D12CreateDeviceExtensionContext");
+        m_extendionsHandle = INTC::D3D12LoadIntelExtensionsLibrary();
+    
+        auto CreateExtensionContext = (INTC::PFNINTCDX12EXT_D3D12CREATEDEVICEEXTENSIONCONTEXT) ::GetProcAddress(m_extendionsHandle, "D3D12CreateDeviceExtensionContext");
         if (CreateExtensionContext != nullptr)
         {
             INTC::ExtensionInfo info = {};
@@ -104,9 +120,10 @@ inline ExtensionHelper::ExtensionHelper(ID3D12Device* in_pDevice)
                 return;
             }
         }
-    }
 
-    ReleaseExtensions();
+        //cleanup on fail
+        ReleaseExtensions();
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -120,7 +137,7 @@ inline ExtensionHelper::~ExtensionHelper()
 //-----------------------------------------------------------------------------
 inline ID3D12CommandQueue* ExtensionHelper::CreateCommandQueue(D3D12_COMMAND_QUEUE_DESC in_queueDesc)
 {
-    ID3D12CommandQueue* pCommandQueue = 0;
+    ID3D12CommandQueue* pCommandQueue = nullptr;
 
     if (nullptr != m_pExtensionContext)
     {
@@ -132,6 +149,7 @@ inline ID3D12CommandQueue* ExtensionHelper::CreateCommandQueue(D3D12_COMMAND_QUE
         ThrowIfFailed((*m_extCreateCommandQueue)(m_pExtensionContext, &extDesc,
             IID_PPV_ARGS(&pCommandQueue)));
     }
+
     return pCommandQueue;
 }
 
@@ -139,11 +157,11 @@ inline ID3D12CommandQueue* ExtensionHelper::CreateCommandQueue(D3D12_COMMAND_QUE
 //-----------------------------------------------------------------------------
 inline void ExtensionHelper::ReleaseExtensions()
 {
-    if (m_extendionsHandle != NULL)
+    if (m_extendionsHandle != nullptr)
     {
         if (m_pExtensionContext != nullptr)
         {
-            auto DestroyExtensionContext = (INTC::PFNINTCDX12EXT_D3D12DESTROYDEVICEEXTENSIONCONTEXT) GetProcAddress(m_extendionsHandle, "D3D12DestroyDeviceExtensionContext");
+            auto DestroyExtensionContext = (INTC::PFNINTCDX12EXT_D3D12DESTROYDEVICEEXTENSIONCONTEXT) ::GetProcAddress(m_extendionsHandle, "D3D12DestroyDeviceExtensionContext");
 
             if (DestroyExtensionContext)
             {
@@ -151,7 +169,8 @@ inline void ExtensionHelper::ReleaseExtensions()
             }
         }
 
-        FreeLibrary(m_extendionsHandle);
+        const BOOL rv = ::FreeLibrary(m_extendionsHandle);
+        assert(rv);
     }
 
     m_extendionsHandle = nullptr;

@@ -24,17 +24,15 @@
 //
 //*********************************************************
 
-#include <D3Dcompiler.h>
-#include <D3Dcompiler.h>
+#include <cassert>
+#include <string>
 #include <sstream>
+#include <D3Dcompiler.h>
 
 #include "Render.h"
 #include "Particles.h"
-#include "D3D12GpuTimer.h"
 #include "ExtensionHelper.h" // Intel extensions
 
-using namespace DirectX;
-using Microsoft::WRL::ComPtr;
 
 #define USE_LATENCY_WAITABLE 1
 
@@ -96,13 +94,15 @@ bool Render::GetSupportsIntelCommandQueueExtension() const
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-std::wstring GetAssetFullPath(const std::wstring in_filename)
+std::wstring GetAssetFullPath(const wchar_t* const in_filename)
 {
     constexpr size_t PATHBUFFERSIZE = MAX_PATH * 4;
     TCHAR buffer[PATHBUFFERSIZE];
-    GetCurrentDirectory(_countof(buffer), buffer);
-    std::wstring directory = buffer;
-    return directory + L"\\\\" + in_filename;
+    ::GetCurrentDirectory(_countof(buffer), buffer);
+
+    std::wostringstream assetFullPath;
+    assetFullPath << buffer << L"\\\\" << in_filename;
+    return assetFullPath.str();
 }
 
 // Indices of shader resources in the descriptor heap.
@@ -128,9 +128,6 @@ void Render::CreateCommandQueue()
     desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
     desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 
-    m_commandQueue.Reset();
-    m_copyQueue.Reset();
-
     if (m_usingIntelCommandQueueExtension)
     {
         m_commandQueue = m_pExtensionHelper->CreateCommandQueue(desc);
@@ -143,6 +140,7 @@ void Render::CreateCommandQueue()
         desc.Type = D3D12_COMMAND_LIST_TYPE_COPY;
         ThrowIfFailed(m_device->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_copyQueue)));
     }
+
     m_commandQueue->SetName(L"Render Queue");
     m_copyQueue->SetName(L"Copy Queue");
 
@@ -158,6 +156,15 @@ void Render::SetUseIntelCommandQueueExtension(bool in_desiredSetting)
     in_desiredSetting = in_desiredSetting && m_pExtensionHelper->GetEnabled();
     if (m_usingIntelCommandQueueExtension != in_desiredSetting)
     {
+        // need additional cleanup when switching from using extension to not using it
+        if (m_usingIntelCommandQueueExtension)
+        {
+            // INTC extension seems to internally increase ref count.
+            // Can't use ComPtr<T>::Reset() here!
+            m_commandQueue->Release();
+            m_copyQueue->Release();
+        }
+
         m_usingIntelCommandQueueExtension = in_desiredSetting;
         CreateCommandQueue();
     }
@@ -166,24 +173,35 @@ void Render::SetUseIntelCommandQueueExtension(bool in_desiredSetting)
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 Render::Render(HWND in_hwnd, UINT in_numParticles,
-    Microsoft::WRL::ComPtr<IDXGIAdapter1> in_adapter,
+    ComPtr<IDXGIAdapter1> in_adapter,
     bool in_useIntelCommandQueueExtension,
-    bool in_fullScreen, RECT in_windowDim) :
-    m_numParticles(in_numParticles),
-    m_frameFenceValues{}
+    bool in_fullScreen, RECT in_windowDim)
+    : m_numParticles(in_numParticles)
+    , m_pExtensionHelper(nullptr)
+    , m_hwnd(in_hwnd)
+    , m_adapter(in_adapter)
+    , m_frameIndex(0)
+    , m_swapChainEvent(nullptr)
+    , m_frameFenceValues{}
+    , m_renderFenceValue(0)
+    , m_renderFenceEvent(nullptr)
+    , m_rtvDescriptorSize(0)
+    , m_srvUavDescriptorSize(0)
+    , m_bufferSize(0)
+    , m_currentBufferIndex(0)
+    , m_pConstantBufferGSData(nullptr)
+    , m_aspectRatio(0.f)
+    , m_copyFenceValue(0)
+    , m_sharedBufferIndex(0)
+    , m_fullScreen(in_fullScreen)
+    , m_windowedSupportsTearing(false)
+    , m_windowDim(in_windowDim)
+    , m_sharedFenceHandle(nullptr)
+    , m_particleSize(0.f)
+    , m_particleIntensity(0.f)
 {
-    m_hwnd = in_hwnd;
-    m_pConstantBufferGSData = 0;
     m_camera.Init({ 0.0f, 0.0f, 1500.0f });
     m_camera.SetMoveSpeed(250.0f);
-    m_currentBufferIndex = 0;
-    m_adapter = in_adapter;
-    m_fullScreen = in_fullScreen;
-    m_windowDim = in_windowDim;
-    m_renderFenceValue = 0;
-    m_windowedSupportsTearing = false;
-    m_particleSize = 0;
-    m_particleIntensity = 0;
 
     CreateDevice(in_adapter.Get(), m_device);
 
@@ -207,16 +225,30 @@ Render::~Render()
     if (m_fullScreen)
     {
         // be sure to leave things in windowed state
-        m_swapChain->SetFullscreenState(FALSE, nullptr);
+        const HRESULT result = m_swapChain->SetFullscreenState(FALSE, nullptr);
+        assert(SUCCEEDED(result));
     }
+
     if (m_pConstantBufferGSData)
     {
-        CD3DX12_RANGE readRange(0, 0);
+        const CD3DX12_RANGE readRange(0, 0);
         m_constantBufferGS->Unmap(0, &readRange);
         m_pConstantBufferGSData = 0;
     }
 
-    CloseHandle(m_sharedFenceHandle);
+    if (m_usingIntelCommandQueueExtension)
+    {
+        // INTC extension seems to internally increase ref count.
+        // Can't use ComPtr<T>::Reset() here!
+        m_commandQueue->Release();
+        m_copyQueue->Release();
+    }
+
+    BOOL rv = ::CloseHandle(m_sharedFenceHandle);
+    assert(rv != FALSE);
+
+    rv = ::CloseHandle(m_renderFenceEvent);
+    assert(rv != FALSE);
 
     delete m_pExtensionHelper;
 }
@@ -224,16 +256,16 @@ Render::~Render()
 //-----------------------------------------------------------------------------
 // get handles to textures the simulation results will be copied to
 //-----------------------------------------------------------------------------
-void Render::SetShared(Compute::SharedHandles in_sharedHandles)
+void Render::SetShared(const Compute::SharedHandles& in_sharedHandles)
 {
     m_sharedBufferIndex = in_sharedHandles.m_bufferIndex;
 
-    ID3D12Heap* pSharedHeap = 0;
-    m_device->OpenSharedHandle(in_sharedHandles.m_heap, IID_PPV_ARGS(&pSharedHeap));
+    ID3D12Heap* pSharedHeap = nullptr;
+    ThrowIfFailed(m_device->OpenSharedHandle(in_sharedHandles.m_heap, IID_PPV_ARGS(&pSharedHeap)));
 
-    m_device->OpenSharedHandle(in_sharedHandles.m_fence, IID_PPV_ARGS(&m_sharedComputeFence));
+    ThrowIfFailed(m_device->OpenSharedHandle(in_sharedHandles.m_fence, IID_PPV_ARGS(&m_sharedComputeFence)));
 
-    D3D12_RESOURCE_DESC crossAdapterDesc = CD3DX12_RESOURCE_DESC::Buffer(in_sharedHandles.m_alignedDataSize,
+    const D3D12_RESOURCE_DESC crossAdapterDesc = CD3DX12_RESOURCE_DESC::Buffer(in_sharedHandles.m_alignedDataSize,
         D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS |
         D3D12_RESOURCE_FLAG_ALLOW_CROSS_ADAPTER);
 
@@ -252,6 +284,7 @@ void Render::SetShared(Compute::SharedHandles in_sharedHandles)
         m_buffers[i]->SetName(wss.str().c_str());
 #endif
     }
+
     pSharedHeap->Release();
 
     // copy initial state from the other adapter
@@ -262,15 +295,16 @@ void Render::SetShared(Compute::SharedHandles in_sharedHandles)
         auto pDstResource = m_buffers;
         auto pSrcResource = m_sharedBuffers;
 
-        m_commandAllocators[m_frameIndex]->Reset();
+        ThrowIfFailed(m_commandAllocators[m_frameIndex]->Reset());
         ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_frameIndex].Get(), nullptr));
 
-        for (int i = 0; i < m_NUM_BUFFERS; i++)
+        for (UINT i = 0; i < m_NUM_BUFFERS; i++)
         {
             m_commandList->CopyBufferRegion(pDstResource[i].Get(), 0, pSrcResource[i].Get(), 0, m_bufferSize);
         }
 
         ThrowIfFailed(m_commandList->Close());
+
         ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
         m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
 
@@ -285,15 +319,17 @@ void Render::SetShared(Compute::SharedHandles in_sharedHandles)
 //-----------------------------------------------------------------------------
 void Render::CreateSwapChain()
 {
-    ComPtr<IDXGIFactory5> factory = nullptr;
+    ComPtr<IDXGIFactory2> factory2;
+
     UINT flags = 0;
 #ifdef _DEBUG
     flags |= DXGI_CREATE_FACTORY_DEBUG;
 #endif
-    if (FAILED(CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory))))
+
+    if (FAILED(::CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory2))))
     {
         flags &= ~DXGI_CREATE_FACTORY_DEBUG;
-        ThrowIfFailed(CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory)));
+        ThrowIfFailed(::CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory2)));
     }
 
     // tearing supported for full-screen borderless windows?
@@ -303,12 +339,12 @@ void Render::CreateSwapChain()
     }
     else
     {
+        ComPtr<IDXGIFactory5> factory5;
+        ThrowIfFailed(factory2.As<IDXGIFactory5>(&factory5));
+
         BOOL allowTearing = FALSE;
-        factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &allowTearing, sizeof(allowTearing));
-        if (allowTearing)
-        {
-            m_windowedSupportsTearing = true;
-        }
+        const HRESULT result = factory5->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &allowTearing, sizeof(allowTearing));
+        m_windowedSupportsTearing = SUCCEEDED(result) && allowTearing;
     }
 
     // Describe and create the swap chain.
@@ -329,46 +365,45 @@ void Render::CreateSwapChain()
         swapChainDesc.Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
     }
 
-    DXGI_SWAP_CHAIN_FULLSCREEN_DESC* pFullScreenDesc = nullptr;
-
     // if full screen mode, launch into the current settings
     DXGI_SWAP_CHAIN_FULLSCREEN_DESC fullScreenDesc = {};
-    IDXGIOutput* pOutput = nullptr;
+    const DXGI_SWAP_CHAIN_FULLSCREEN_DESC* pFullScreenDesc = m_fullScreen ? &fullScreenDesc : nullptr;
+    ComPtr<IDXGIOutput> output;
 
     // on switch to full screen, try to move to a monitor attached to the adapter
     // if no monitor attached, just use the "current" display
     if (m_fullScreen)
     {
         // get the dimensions of the primary monitor, same as GetDeviceCaps( hdcPrimaryMonitor, HORZRES)
-        swapChainDesc.Width = GetSystemMetrics(SM_CXSCREEN);
-        swapChainDesc.Height = GetSystemMetrics(SM_CYSCREEN);
+        swapChainDesc.Width = ::GetSystemMetrics(SM_CXSCREEN);
+        swapChainDesc.Height = ::GetSystemMetrics(SM_CYSCREEN);
         // primary monitor has 0,0 as top-left
         UINT left = 0;
         UINT top = 0;
 
-        HRESULT foundOutput = 0;
         // take the first attached monitor
-        m_adapter->EnumOutputs(0, &pOutput);
-        if (pOutput)
+        HRESULT result = m_adapter->EnumOutputs(0, &output);
+        if (SUCCEEDED(result))
         {
             DXGI_OUTPUT_DESC outputDesc;
-            pOutput->GetDesc(&outputDesc);
+            ThrowIfFailed(output->GetDesc(&outputDesc));
+
             swapChainDesc.Width = outputDesc.DesktopCoordinates.right - outputDesc.DesktopCoordinates.left;
             swapChainDesc.Height = outputDesc.DesktopCoordinates.bottom - outputDesc.DesktopCoordinates.top;
             left = outputDesc.DesktopCoordinates.left;
             top = outputDesc.DesktopCoordinates.top;
         }
-        SetWindowLongPtr(m_hwnd, GWL_STYLE, WS_VISIBLE | WS_POPUP);
-        SetWindowPos(m_hwnd, HWND_TOP, left, top, swapChainDesc.Width, swapChainDesc.Height,
+
+        ::SetWindowLongPtr(m_hwnd, GWL_STYLE, WS_VISIBLE | WS_POPUP);
+        ::SetWindowPos(m_hwnd, HWND_TOP, left, top, swapChainDesc.Width, swapChainDesc.Height,
             SWP_FRAMECHANGED);
 
         fullScreenDesc.Windowed = FALSE;
-        pFullScreenDesc = &fullScreenDesc;
     }
 
     ComPtr<IDXGISwapChain1> swapChain;
-    HRESULT hr = factory->CreateSwapChainForHwnd(m_commandQueue.Get(), m_hwnd,
-        &swapChainDesc, pFullScreenDesc, pOutput, &swapChain);
+    ThrowIfFailed(factory2->CreateSwapChainForHwnd(m_commandQueue.Get(), m_hwnd,
+        &swapChainDesc, pFullScreenDesc, output.Get(), &swapChain));
 
     m_viewport = CD3DX12_VIEWPORT(0.0f, 0.0f,
         static_cast<FLOAT>(swapChainDesc.Width), static_cast<FLOAT>(swapChainDesc.Height));
@@ -382,26 +417,29 @@ void Render::CreateSwapChain()
     - To use this flag in full screen Win32 apps, the application should present to a fullscreen borderless window
     and disable automatic ALT+ENTER fullscreen switching using IDXGIFactory::MakeWindowAssociation.
      */
-    ThrowIfFailed(factory->MakeWindowAssociation(m_hwnd,
+    ThrowIfFailed(factory2->MakeWindowAssociation(m_hwnd,
         DXGI_MWA_NO_WINDOW_CHANGES | DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_PRINT_SCREEN));
 
     ThrowIfFailed(swapChain.As(&m_swapChain));
 
     if (m_fullScreen)
     {
-        m_swapChain->SetFullscreenState(TRUE, nullptr);
+        const HRESULT result = m_swapChain->SetFullscreenState(TRUE, nullptr);
+        assert(SUCCEEDED(result));
     }
 
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
+
 #if USE_LATENCY_WAITABLE
     m_swapChainEvent = m_swapChain->GetFrameLatencyWaitableObject();
 
     // from MSDN:
     // Note that it is important to call this before the first Present
     // in order to minimize the latency of the swap chain.
-    WaitForSingleObjectEx(m_swapChainEvent, 1000, TRUE);
+    const DWORD rv = ::WaitForSingleObjectEx(m_swapChainEvent, 1000, TRUE);
+    assert(rv == WAIT_OBJECT_0 || rv == WAIT_TIMEOUT);
 #else
-    m_swapChainEvent = 0;
+    m_swapChainEvent = nullptr;
 #endif
 
     m_aspectRatio = static_cast<float>(swapChainDesc.Width) / static_cast<float>(swapChainDesc.Height);
@@ -447,6 +485,7 @@ void Render::LoadAssets()
         rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
         rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
         ThrowIfFailed(m_device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap)));
+
         CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc;
         rootSignatureDesc.Init_1_1(_countof(rootParameters), rootParameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
@@ -463,20 +502,20 @@ void Render::LoadAssets()
         CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart());
 
         // Create a RTV and a command allocator for each frame.
-        for (std::uint32_t i = 0; i < NUM_FRAMES; i++)
+        for (UINT i = 0; i < NUM_FRAMES; i++)
         {
-            (m_swapChain->GetBuffer(i, IID_PPV_ARGS(&m_renderTargets[i])));
+            ThrowIfFailed(m_swapChain->GetBuffer(i, IID_PPV_ARGS(&m_renderTargets[i])));
             m_device->CreateRenderTargetView(m_renderTargets[i].Get(), nullptr, rtvHandle);
             rtvHandle.Offset(1, m_rtvDescriptorSize);
 
             ThrowIfFailed(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_commandAllocators[i])));
             ThrowIfFailed(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COPY, IID_PPV_ARGS(&m_copyAllocators[i])));
 
-            std::wstringstream cmdAllocName;
+            std::wostringstream cmdAllocName;
             cmdAllocName << "Render CmdAlloc " << i;
             m_commandAllocators[i]->SetName(cmdAllocName.str().c_str());
 
-            std::wstringstream copyAllocName;
+            std::wostringstream copyAllocName;
             copyAllocName << "Copy CmdAlloc " << i;
             m_copyAllocators[i]->SetName(copyAllocName.str().c_str());
         }
@@ -486,26 +525,29 @@ void Render::LoadAssets()
     // Create the pipeline states, which includes compiling and loading shaders
     //-------------------------------------------------------------------------
     {
+        // Load and compile shaders.
+        ID3DBlob* pErrorMsgs = nullptr;
+
         ComPtr<ID3DBlob> vertexShader;
         ComPtr<ID3DBlob> geometryShader;
         ComPtr<ID3DBlob> pixelShader;
 
 #if defined(_DEBUG)
         // Enable better shader debugging with the graphics debugging tools.
-        UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+        const UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
 #else
-        UINT compileFlags = 0;
+        const UINT compileFlags = 0;
 #endif
 
-        // Load and compile shaders.
-        ID3DBlob* pErrorMsgs = 0;
+        // all shaders in same file
         const wchar_t* pShaderName = L"ParticleDraw.hlsl";
+        const std::wstring fullShaderPath = GetAssetFullPath(pShaderName);
 
-        ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(pShaderName).c_str(), nullptr, nullptr, "VSParticleDraw", "vs_5_0", compileFlags, 0, &vertexShader, &pErrorMsgs));
-        ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(pShaderName).c_str(), nullptr, nullptr, "GSParticleDraw", "gs_5_0", compileFlags, 0, &geometryShader, &pErrorMsgs));
-        ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(pShaderName).c_str(), nullptr, nullptr, "PSParticleDraw", "ps_5_0", compileFlags, 0, &pixelShader, &pErrorMsgs));
+        ThrowIfFailed(::D3DCompileFromFile(fullShaderPath.c_str(), nullptr, nullptr, "VSParticleDraw", "vs_5_0", compileFlags, 0, &vertexShader, &pErrorMsgs));
+        ThrowIfFailed(::D3DCompileFromFile(fullShaderPath.c_str(), nullptr, nullptr, "GSParticleDraw", "gs_5_0", compileFlags, 0, &geometryShader, &pErrorMsgs));
+        ThrowIfFailed(::D3DCompileFromFile(fullShaderPath.c_str(), nullptr, nullptr, "PSParticleDraw", "ps_5_0", compileFlags, 0, &pixelShader, &pErrorMsgs));
 
-        D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
+        const D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
         {
             { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
@@ -538,9 +580,7 @@ void Render::LoadAssets()
         psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
         psoDesc.SampleDesc.Count = 1;
 
-        HRESULT hr = m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState));
-
-        ThrowIfFailed(hr);
+        ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState)));
         NAME_D3D12_OBJECT(m_pipelineState);
     }
 
@@ -568,13 +608,14 @@ void Render::LoadAssets()
 
         NAME_D3D12_OBJECT(m_constantBufferGS);
 
-        CD3DX12_RANGE readRange(0, 0);        // We do not intend to read from this resource on the CPU.
+        const CD3DX12_RANGE readRange(0, 0);        // We do not intend to read from this resource on the CPU.
         ThrowIfFailed(m_constantBufferGS->Map(0, &readRange, reinterpret_cast<void**>(&m_pConstantBufferGSData)));
         ZeroMemory(m_pConstantBufferGSData, constantBufferGSSize);
     }
 
     // init resources, e.g. upload initial partical positions
-    m_commandList->Close();
+    ThrowIfFailed(m_commandList->Close());
+
     ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
     m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
 
@@ -587,7 +628,7 @@ void Render::LoadAssets()
         m_renderFenceValue++;
 
         // Create an event handle to use for frame synchronization.
-        m_renderFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        m_renderFenceEvent = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
         if (m_renderFenceEvent == nullptr)
         {
             ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
@@ -598,7 +639,7 @@ void Render::LoadAssets()
     {
         ThrowIfFailed(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_COPY, m_copyAllocators[m_frameIndex].Get(), nullptr, IID_PPV_ARGS(&m_copyList)));
         m_copyList->SetName(L"Copy CommandList");
-        m_copyList->Close();
+        ThrowIfFailed(m_copyList->Close());
 
         m_copyFenceValue = 0;
         ThrowIfFailed(m_device->CreateFence(
@@ -634,7 +675,8 @@ void Render::WaitForGpu()
     m_renderFenceValue++;
 
     // Wait until the signal command has been processed.
-    WaitForSingleObject(m_renderFenceEvent, INFINITE);
+    const DWORD rv = ::WaitForSingleObject(m_renderFenceEvent, INFINITE);
+    assert(rv == WAIT_OBJECT_0);
 }
 
 //-----------------------------------------------------------------------------
@@ -654,11 +696,13 @@ HANDLE Render::MoveToNextFrame()
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
 
     // If the next frame is not ready to be rendered yet, wait until it is ready.
-    HANDLE returnHandle = 0;
+    HANDLE returnHandle = nullptr;
+
     if (m_renderFence->GetCompletedValue() < m_frameFenceValues[m_frameIndex])
     {
         ThrowIfFailed(m_renderFence->SetEventOnCompletion(m_frameFenceValues[m_frameIndex], m_renderFenceEvent));
-        //WaitForSingleObject(m_renderFenceEvent, INFINITE);
+        //const DWORD rv = ::WaitForSingleObject(m_renderFenceEvent, INFINITE);
+        //assert(rv == WAIT_OBJECT_0);
         returnHandle = m_renderFenceEvent;
     }
 
@@ -676,6 +720,7 @@ void Render::CreateVertexBuffer()
     {
         vertices[i].color = XMFLOAT4(1.0f, 1.0f, 0.2f, 1.0f);
     }
+
     const UINT bufferSize = m_numParticles * sizeof(ParticleVertex);
 
     ThrowIfFailed(m_device->CreateCommittedResource(
@@ -740,7 +785,7 @@ void Render::CreateParticleBuffers()
         m_buffers[i]->SetName(wss.str().c_str());
 #endif
 
-        CD3DX12_CPU_DESCRIPTOR_HANDLE srvHandle(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), SrvParticlePosVelo0 + i, m_srvUavDescriptorSize);
+        const CD3DX12_CPU_DESCRIPTOR_HANDLE srvHandle(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), SrvParticlePosVelo0 + i, m_srvUavDescriptorSize);
         m_device->CreateShaderResourceView(m_buffers[i].Get(), &srvDesc, srvHandle);
     }
 }
@@ -751,9 +796,11 @@ void Render::UpdateCamera()
 {
 #if USE_LATENCY_WAITABLE
     // Wait for the previous Present to complete.
-    WaitForSingleObjectEx(m_swapChainEvent, 1000, FALSE);
+    const DWORD rv = ::WaitForSingleObjectEx(m_swapChainEvent, 1000, FALSE);
+    assert(rv == WAIT_OBJECT_0 || rv == WAIT_TIMEOUT);
 #endif
-    //m_timer.Tick(NULL);
+
+    //m_timer.Tick(nullptr);
     //m_camera.Update(static_cast<float>(m_timer.GetElapsedSeconds()));
     m_camera.Update(0);
 
@@ -764,6 +811,7 @@ void Render::UpdateCamera()
     constantBufferGS.particleIntensity = m_particleIntensity;
 
     UINT8* destination = m_pConstantBufferGSData + sizeof(ConstantBufferGS) * m_frameIndex;
+    assert(destination);
     memcpy(destination, &constantBufferGS, sizeof(ConstantBufferGS));
 }
 
@@ -779,14 +827,14 @@ void Render::CopySimulationResults(UINT64 in_fenceValue, int in_numActiveParticl
     //-------------------------------------------------------------------------
     ThrowIfFailed(m_copyQueue->Wait(m_renderFence.Get(), m_renderFenceValue-1));
 
-    UINT srcSharedIndex = 1 - m_sharedBufferIndex;     // reading from shared buffer pointed to by m_sharedBufferIndex
-    UINT dstLocalIndex = 1 - m_currentBufferIndex; // writing to local buffer pointed to by m_currentBufferIndex
+    const UINT srcSharedIndex = 1 - m_sharedBufferIndex;     // reading from shared buffer pointed to by m_sharedBufferIndex
+    const UINT dstLocalIndex = 1 - m_currentBufferIndex; // writing to local buffer pointed to by m_currentBufferIndex
     m_sharedBufferIndex = 1 - m_sharedBufferIndex; // move shared index forward for next time
 
     ID3D12Resource* pDstResource = m_buffers[dstLocalIndex].Get();
     ID3D12Resource* pSrcResource = m_sharedBuffers[srcSharedIndex].Get();
 
-    m_copyAllocators[m_frameIndex]->Reset();
+    ThrowIfFailed(m_copyAllocators[m_frameIndex]->Reset());
     ThrowIfFailed(m_copyList->Reset(m_copyAllocators[m_frameIndex].Get(), nullptr));
 
     // a resource barrier gives maximum information to the runtime that may help other adapters with cache sync
@@ -798,6 +846,7 @@ void Render::CopySimulationResults(UINT64 in_fenceValue, int in_numActiveParticl
     m_copyList->CopyBufferRegion(pDstResource, 0, pSrcResource, 0, in_numActiveParticles * sizeof(Particle));
 
     ThrowIfFailed(m_copyList->Close());
+
     ID3D12CommandList* ppCommandLists[] = { m_copyList.Get() };
     m_copyQueue->ExecuteCommandLists(1, ppCommandLists);
 
@@ -827,7 +876,7 @@ HANDLE Render::Draw(int in_numActiveParticles, Particles* in_pParticles, UINT64&
     // start copy for next frame. no reason to delay.
     CopySimulationResults(inout_fenceValue, in_numParticlesCopied);
 
-    m_commandAllocators[m_frameIndex]->Reset();
+    ThrowIfFailed(m_commandAllocators[m_frameIndex]->Reset());
     ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_frameIndex].Get(), m_pipelineState.Get()));
 
     m_pTimer->BeginTimer(m_commandList.Get(), static_cast<std::uint32_t>(GpuTimers::FPS));
@@ -843,7 +892,7 @@ HANDLE Render::Draw(int in_numActiveParticles, Particles* in_pParticles, UINT64&
     m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex].Get(),
         D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
 
-    CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
+    const CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
     m_commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
 
     m_commandList->RSSetViewports(1, &m_viewport);
@@ -861,7 +910,7 @@ HANDLE Render::Draw(int in_numActiveParticles, Particles* in_pParticles, UINT64&
     ID3D12Resource* pResource = m_buffers[m_currentBufferIndex].Get();
     m_currentBufferIndex = 1 - m_currentBufferIndex;
 
-    CD3DX12_GPU_DESCRIPTOR_HANDLE srvHandle(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), srvIndex, m_srvUavDescriptorSize);
+    const CD3DX12_GPU_DESCRIPTOR_HANDLE srvHandle(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), srvIndex, m_srvUavDescriptorSize);
     m_commandList->SetGraphicsRootDescriptorTable(GraphicsRootSRVTable, srvHandle);
 
     // draw things
@@ -891,7 +940,7 @@ HANDLE Render::Draw(int in_numActiveParticles, Particles* in_pParticles, UINT64&
     //-------------------------------------------------------------------------
     // Present the frame.
     //-------------------------------------------------------------------------
-    UINT syncInterval = in_pParticles->GetVsyncEnabled() ? 1 : 0;
+    const UINT syncInterval = in_pParticles->GetVsyncEnabled() ? 1 : 0;
     UINT presentFlags = 0;
     if ((m_windowedSupportsTearing) && (!m_fullScreen) && (0 == syncInterval))
     {

@@ -24,36 +24,34 @@
 //
 //*********************************************************
 
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
-
 #include "WindowProc.h"
 #include "Particles.h"
 
+#pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "dxguid.lib") // DXGI_DEBUG_ALL guuid
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "d3dcompiler.lib")
-#pragma comment(lib, "dxgi.lib")
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 int WINAPI WinMain(
     _In_ HINSTANCE hInstance,
-    _In_opt_ HINSTANCE hPrevInstance,
-    _In_ LPSTR lpCmdLine,
-    _In_ int nCmdShow)
+    _In_opt_ HINSTANCE /*hPrevInstance*/,
+    _In_ LPSTR /*lpCmdLine*/,
+    _In_ int /*nCmdShow*/)
 {
     WNDCLASSW wc = {};
     wc.lpszClassName = L"MultiGPU";
     wc.style = CS_OWNDC;
     wc.lpfnWndProc = WindowProc::WndProc;
     wc.cbWndExtra = 0;
-    RegisterClassW(&wc);
+    ::RegisterClassW(&wc);
 
     LONG windowDim = 1024;
     RECT windowRect = { 0, 0, windowDim, windowDim };
-    AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);
+    ::AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);
 
-    HWND hWnd = CreateWindow(
+    HWND hWnd = ::CreateWindow(
         wc.lpszClassName, L"Particles",
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT,
@@ -62,24 +60,25 @@ int WINAPI WinMain(
         0, 0, hInstance, 0);
     if (!hWnd)
     {
+        ::UnregisterClassW(wc.lpszClassName, hInstance);
         return -1;
     }
 
-    ShowWindow(hWnd, SW_SHOWNORMAL);
+    ::ShowWindow(hWnd, SW_SHOWNORMAL);
 
     bool drawEnabled = true;
 
-    SetWindowLongPtr(hWnd, GWLP_USERDATA, LONG_PTR(&drawEnabled));
+    ::SetWindowLongPtr(hWnd, GWLP_USERDATA, LONG_PTR(&drawEnabled));
 
     Particles particles(hWnd);
 
     MSG msg = { 0 };
     while (WM_QUIT != msg.message)
     {
-        if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
+        if (::PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
         {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
+            ::TranslateMessage(&msg);
+            ::DispatchMessage(&msg);
         }
         else
         {
@@ -92,7 +91,7 @@ int WINAPI WinMain(
 
     particles.Shutdown();
 
-    UnregisterClassW(wc.lpszClassName, hInstance);
+    ::UnregisterClassW(wc.lpszClassName, hInstance);
 
     return 0;
 }

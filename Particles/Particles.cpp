@@ -24,18 +24,20 @@
 //
 //*********************************************************
 
-#include <d3d12.h>
-#include <Windows.h>
+#include <cassert>
 #include <algorithm> // for std::min()
 
-#include "Particles.h"
-#include "d3dx12.h"
+#include <d3d12.h>
+#include <dxgidebug.h>
 
 #include "imgui.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx12.h"
 
-using Microsoft::WRL::ComPtr;
+#include "Particles.h"
+#include "Compute.h"
+#include "Render.h"
+
 
 const INT ParticleCount = 4 * 1024 * 1024;
 
@@ -44,14 +46,12 @@ const INT ParticleCount = 4 * 1024 * 1024;
 //-----------------------------------------------------------------------------
 void InitDebugLayer()
 {
+    ID3D12Debug1* pDebugController = nullptr;
+    if (SUCCEEDED(::D3D12GetDebugInterface(IID_PPV_ARGS(&pDebugController))))
     {
-        ID3D12Debug1* pDebugController = nullptr;
-        if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&pDebugController))))
-        {
-            //pDebugController->SetEnableGPUBasedValidation(TRUE);
-            pDebugController->EnableDebugLayer();
-            pDebugController->Release();
-        }
+        //pDebugController->SetEnableGPUBasedValidation(TRUE);
+        pDebugController->EnableDebugLayer();
+        pDebugController->Release();
     }
 }
 
@@ -61,9 +61,12 @@ void InitDebugLayer()
 //-----------------------------------------------------------------------------
 void Particles::ShareHandles()
 {
-    HANDLE renderFenceHandle = m_pRender->GetSharedFenceHandle();
-    auto sharedHandles = m_pCompute->GetSharedHandles(renderFenceHandle);
-    m_pRender->SetShared(sharedHandles);
+    assert(m_pRender != nullptr);
+    assert(m_pCompute != nullptr);
+
+    const HANDLE renderFenceHandle = m_pRender->GetSharedFenceHandle();
+    assert(renderFenceHandle != nullptr);
+    m_pRender->SetShared(m_pCompute->GetSharedHandles(renderFenceHandle));
 }
 
 //-----------------------------------------------------------------------------
@@ -71,64 +74,74 @@ void Particles::ShareHandles()
 // save info so roles can be dynamically changed
 //-----------------------------------------------------------------------------
 Particles::Particles(HWND in_hwnd)
+    : m_hwnd(in_hwnd)
+
+    , m_pRender(nullptr)
+    , m_pCompute(nullptr)
+
+    , m_renderAdapterIndex(-1)
+    , m_computeAdapterIndex(-1)
+
+    , m_commandQueueExtensionEnabled(false)
+    , m_vsyncEnabled(true)
+    , m_fullScreen(false)
+
+    , m_height(0)
+
+    , m_previousFrameTime(0.f)
+    , m_frameTime(0.f)
+
+    , m_particleSize(INITIAL_PARTICLE_SIZE)
+    , m_particleIntensity(INITIAL_PARTICLE_INTENSITY)
+
+    , m_numParticlesRendered(ParticleCount)
+    , m_numParticlesCopied(ParticleCount)
+    , m_numParticlesSimulated(ParticleCount)
+    , m_numParticlesLinked(true)
 {
-    m_hwnd = in_hwnd;
-    m_vsyncEnabled = true;
-    m_fullScreen = false;
-    m_frameTime = 0;
-    m_particleSize = INITIAL_PARTICLE_SIZE;
-    m_particleIntensity = INITIAL_PARTICLE_INTENSITY;
-
-    m_numParticlesRendered = ParticleCount;
-    m_numParticlesCopied = ParticleCount;
-    m_numParticlesSimulated = ParticleCount;
-    m_numParticlesLinked = true;
-
     m_windowInfo.cbSize = sizeof(WINDOWINFO);
-    GetWindowInfo(m_hwnd, &m_windowInfo);
+    const BOOL rv = ::GetWindowInfo(m_hwnd, &m_windowInfo);
+    assert(rv);
 
     InitDebugLayer();
-
-    ComPtr<IDXGIFactory2> factory = nullptr;
+    
     UINT flags = 0;
 #ifdef _DEBUG
     flags |= DXGI_CREATE_FACTORY_DEBUG;
 #endif
-    if (FAILED(CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory))))
+
+    if (FAILED(::CreateDXGIFactory2(flags, IID_PPV_ARGS(&m_dxgiFactory))))
     {
         flags &= ~DXGI_CREATE_FACTORY_DEBUG;
-        ThrowIfFailed(CreateDXGIFactory2(flags, IID_PPV_ARGS(&factory)));
+        ThrowIfFailed(::CreateDXGIFactory2(flags, IID_PPV_ARGS(&m_dxgiFactory)));
     }
-    ThrowIfFailed(factory.As<IDXGIFactory4>(&m_dxgiFactory));
 
     // find adapters
-    ComPtr<IDXGIAdapter1> adapter = nullptr;
+    ComPtr<IDXGIAdapter1> adapter;
     for (UINT i = 0; m_dxgiFactory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
     {
-
         DXGI_ADAPTER_DESC1 desc;
-        adapter->GetDesc1(&desc);
+        ThrowIfFailed(adapter->GetDesc1(&desc));
 
         if (((desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) == 0) && (desc.VendorId != 5140))
         {
             m_adapters.push_back(adapter);
 
             std::string narrowString;
-            int numChars = WideCharToMultiByte(CP_UTF8, 0, desc.Description, _countof(desc.Description), NULL, 0, NULL, NULL);
+            const int numChars = ::WideCharToMultiByte(CP_UTF8, 0, desc.Description, _countof(desc.Description), nullptr, 0, nullptr, nullptr);
             narrowString.resize(numChars);
-            WideCharToMultiByte(CP_UTF8, 0, desc.Description, (int)narrowString.size(), &narrowString[0], numChars, NULL, NULL);
+            ::WideCharToMultiByte(CP_UTF8, 0, desc.Description, (int)narrowString.size(), &narrowString[0], numChars, nullptr, nullptr);
 
             // m_adapterDescriptions holds the strings
             m_adapterDescriptions.push_back(narrowString);
             // m_adapterDescriptionPtrs is an array of pointers into m_adapterDescriptions, and is used by imgui
             m_adapterDescriptionPtrs.push_back(m_adapterDescriptions.back().c_str());
         }
-        adapter = nullptr;
     }
 
     // initial state
-    size_t numAdapters = m_adapters.size();
-    if (m_adapters.size())
+    const size_t numAdapters = m_adapters.size();
+    if (numAdapters > 0)
     {
         m_renderAdapterIndex = 0;
         // FIXME
@@ -147,6 +160,7 @@ Particles::Particles(HWND in_hwnd)
         throw;
     }
 
+#if IMGUI_ENABLED
     //-----------------------------
     // one-time UI setup
     //-----------------------------
@@ -162,6 +176,7 @@ Particles::Particles(HWND in_hwnd)
 
     // render device specific setup
     InitGui();
+#endif
 
     // start frame duration timer
     m_frameTimer.Start();
@@ -174,7 +189,12 @@ Particles::~Particles()
 {
     delete m_pCompute;
     delete m_pRender;
+
+#if IMGUI_ENABLED
+    ImGui_ImplDX12_Shutdown();
+    ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext(nullptr);
+#endif
 }
 
 
@@ -186,6 +206,7 @@ Particles::~Particles()
 void Particles::InitGui()
 {
     m_srvHeap.Reset();
+    
     ID3D12Device* pDevice = m_pRender->GetDevice();
 
     // Describe and create a shader resource view (SRV) heap for the texture.
@@ -197,7 +218,8 @@ void Particles::InitGui()
 
     CD3DX12_CPU_DESCRIPTOR_HANDLE cpu(m_srvHeap->GetCPUDescriptorHandleForHeapStart());
     CD3DX12_GPU_DESCRIPTOR_HANDLE gpu(m_srvHeap->GetGPUDescriptorHandleForHeapStart());
-
+    
+    ImGui_ImplDX12_Shutdown();
     ImGui_ImplDX12_Init(
         pDevice,
         Render::GetNumFrames(),
@@ -345,14 +367,15 @@ void Particles::Draw()
 
     // start simulation. This also starts copy of results for next frame
     UINT64 renderSharedFenceValue = m_pCompute->GetFenceValue();
-    HANDLE drawHandle = m_pRender->Draw(m_numParticlesRendered, this, renderSharedFenceValue, m_numParticlesCopied);
+    const HANDLE drawHandle = m_pRender->Draw(m_numParticlesRendered, this, renderSharedFenceValue, m_numParticlesCopied);
     m_pCompute->Simulate(m_numParticlesSimulated, renderSharedFenceValue);
 
     // because the command lists of each adapter wait() on each other,
     // only need to host-wait() around the Present() on the render adapter
     if (drawHandle)
     {
-        WaitForSingleObjectEx(drawHandle, INFINITE, FALSE);
+        const DWORD rv = ::WaitForSingleObjectEx(drawHandle, INFINITE, FALSE);
+        assert(rv == WAIT_OBJECT_0);
     }
 
     // if anything changed that might result in an adapter being removed,
@@ -369,8 +392,8 @@ void Particles::Draw()
     }
 
     // host-side frame time
-    float currentFrameTime = (float)m_frameTimer.GetTime();
-    float frameTime = 1000.0f * (currentFrameTime - m_previousFrameTime);
+    const float currentFrameTime = (float)m_frameTimer.GetTime();
+    const float frameTime = 1000.0f * (currentFrameTime - m_previousFrameTime);
     m_previousFrameTime = currentFrameTime;
     const std::uint32_t AVERAGE_OVER = 20;
     m_frameTime *= (AVERAGE_OVER - 1);
@@ -384,7 +407,9 @@ void Particles::Draw()
     // switching from windowed to full screen? remember window state
     if (m_fullScreen && !prevFullScreen)
     {
-        GetWindowInfo(m_hwnd, &m_windowInfo);
+        assert(m_windowInfo.cbSize == sizeof(WINDOWINFO));
+        const BOOL rv = ::GetWindowInfo(m_hwnd, &m_windowInfo);
+        assert(rv);
     }
 
     // new render device?
@@ -404,15 +429,17 @@ void Particles::Draw()
         // for windowed mode, reset the window style and position before creating new Render
         if (prevFullScreen && !m_fullScreen)
         {
-            UINT width = m_windowInfo.rcWindow.right - m_windowInfo.rcWindow.left;
-            UINT height = m_windowInfo.rcWindow.bottom - m_windowInfo.rcWindow.top;
-            UINT left = m_windowInfo.rcWindow.left;
-            UINT top = m_windowInfo.rcWindow.top;
-            SetWindowLongPtr(m_hwnd, GWL_STYLE, m_windowInfo.dwStyle);
-            SetWindowPos(m_hwnd, HWND_NOTOPMOST, left, top, width, height, SWP_FRAMECHANGED);
+            const UINT width = m_windowInfo.rcWindow.right - m_windowInfo.rcWindow.left;
+            const UINT height = m_windowInfo.rcWindow.bottom - m_windowInfo.rcWindow.top;
+            const UINT left = m_windowInfo.rcWindow.left;
+            const UINT top = m_windowInfo.rcWindow.top;
+
+            ::SetWindowLongPtr(m_hwnd, GWL_STYLE, m_windowInfo.dwStyle);
+            ::SetWindowPos(m_hwnd, HWND_NOTOPMOST, left, top, width, height, SWP_FRAMECHANGED);
         }
 
         m_pRender = new Render(m_hwnd, ParticleCount, m_adapters[m_renderAdapterIndex], m_commandQueueExtensionEnabled, m_fullScreen, m_windowInfo.rcClient);
+
 #if IMGUI_ENABLED
         InitGui();
 #endif

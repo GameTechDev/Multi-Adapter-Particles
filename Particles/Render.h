@@ -26,18 +26,25 @@
 #pragma once
 
 #include "AdapterShared.h"
+#include <DirectXMath.h>
 #include "SimpleCamera.h"
-
 #include "Compute.h" // for shared handles structure
+
+class ExtensionHelper;
 
 class Render : public AdapterShared
 {
 public:
     Render(HWND in_hwnd, UINT in_numParticles,
-        Microsoft::WRL::ComPtr<IDXGIAdapter1> in_adapter,
+        ComPtr<IDXGIAdapter1> in_adapter,
         bool in_useIntelCommandQueueExtension,
         bool in_fullScreen, RECT in_windowDim);
-    ~Render();
+    virtual ~Render();
+
+    Render(const Render&) = delete;
+    Render(Render&&) = delete;
+    Render& operator=(const Render&) = delete;
+    Render& operator=(Render&&) = delete;
 
     // Draw() tells Particles to draw its UI
     // input is compute fence value. output is render fence value.
@@ -51,7 +58,7 @@ public:
 
     //-----------------------------------------------------
     // used to create descriptor heap for UI
-    ID3D12Device* GetDevice() { return m_device.Get(); }
+    ID3D12Device* GetDevice() const { return m_device.Get(); }
     // used to initialize UI object
     static UINT GetNumFrames() { return NUM_FRAMES; }
     //-----------------------------------------------------
@@ -59,12 +66,12 @@ public:
     //-----------------------------------------------------
     // Intel Command Queue Extension interfaces:
     // changes extension setting only if different from current setting
-    void SetUseIntelCommandQueueExtension(bool in_desiredSetting) override;
+    virtual void SetUseIntelCommandQueueExtension(bool in_desiredSetting) override;
     bool GetSupportsIntelCommandQueueExtension() const;
     //-----------------------------------------------------
 
-    HANDLE GetSharedFenceHandle() { return m_sharedFenceHandle; }
-    void SetShared(Compute::SharedHandles in_sharedHandles);
+    HANDLE GetSharedFenceHandle() const { return m_sharedFenceHandle; }
+    void SetShared(const Compute::SharedHandles& in_sharedHandles);
 
     struct Particle
     {
@@ -72,13 +79,13 @@ public:
     };
 
     // stalls until adapter is idle
-    void WaitForGpu();
+    virtual void WaitForGpu() override;
+
 private:
     static constexpr std::uint32_t NUM_FRAMES = 2;
     const UINT m_numParticles;
 
-    class ExtensionHelper* m_pExtensionHelper;
-    bool m_usingIntelCommandQueueExtension;
+    ExtensionHelper* m_pExtensionHelper;
     HWND m_hwnd;
     ComPtr<IDXGIAdapter1> m_adapter;
     ComPtr<ID3D12Device> m_device;
@@ -138,6 +145,7 @@ private:
         // for convenience when computing the struct's size.
         float padding[32-1-1];
     };
+
     ComPtr<ID3D12Resource> m_vertexBuffer;
     ComPtr<ID3D12Resource> m_vertexBufferUpload;
     D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
@@ -153,6 +161,7 @@ private:
     UINT8* m_pConstantBufferGSData; // re-used across device changes. destroy!
     SimpleCamera m_camera;
     float m_aspectRatio;
+
     void UpdateCamera();
 
     void CreateVertexBuffer();

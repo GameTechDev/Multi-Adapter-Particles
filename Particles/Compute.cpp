@@ -24,16 +24,16 @@
 //
 //*********************************************************
 
-#include <D3Dcompiler.h>
+#include <cassert>
 #include <random>
+#include <string>
 #include <sstream>
 #include <ppl.h>
+#include <D3Dcompiler.h>
 
 #include "Compute.h"
 #include "Render.h" // for struct Particle
 #include "ExtensionHelper.h" // Intel extensions
-
-const float Compute::ParticleSpread = PARTICLE_SPREAD;
 
 enum ComputeRootParameters : UINT32
 {
@@ -70,7 +70,7 @@ enum class GpuTimers
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 // FIXME: shared functions go in a header?
-extern std::wstring GetAssetFullPath(const std::wstring in_filename);
+extern std::wstring GetAssetFullPath(const wchar_t* const in_filename);
 
 //-----------------------------------------------------------------------------
 // creates a command queue with the intel extension if available
@@ -81,7 +81,6 @@ void Compute::CreateCommandQueue()
     desc.Type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
     desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 
-    m_commandQueue.Reset();
     if (m_usingIntelCommandQueueExtension)
     {
         m_commandQueue = m_pExtensionHelper->CreateCommandQueue(desc);
@@ -101,6 +100,14 @@ void Compute::SetUseIntelCommandQueueExtension(bool in_desiredSetting)
     in_desiredSetting = in_desiredSetting && m_pExtensionHelper->GetEnabled();
     if (m_usingIntelCommandQueueExtension != in_desiredSetting)
     {
+        // need additional cleanup when switching from using extension to not using it
+        if (m_usingIntelCommandQueueExtension)
+        {
+            // INTC extension seems to internally increase ref count.
+            // Can't use ComPtr<T>::Reset() here!
+            m_commandQueue->Release();
+        }
+
         m_usingIntelCommandQueueExtension = in_desiredSetting;
         CreateCommandQueue();
     }
@@ -128,16 +135,16 @@ void Compute::CreateSharedBuffers()
 
     const UINT dataSize = m_numParticles * sizeof(Render::Particle);
 
-    D3D12_RESOURCE_DESC crossAdapterDesc = CD3DX12_RESOURCE_DESC::Buffer(dataSize,
+    const D3D12_RESOURCE_DESC crossAdapterDesc = CD3DX12_RESOURCE_DESC::Buffer(dataSize,
         D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS |
         D3D12_RESOURCE_FLAG_ALLOW_CROSS_ADAPTER);
 
-    D3D12_RESOURCE_ALLOCATION_INFO textureInfo =
+    const D3D12_RESOURCE_ALLOCATION_INFO textureInfo =
         m_device->GetResourceAllocationInfo(0, 1, &crossAdapterDesc);
 
-    UINT64 alignedDataSize = textureInfo.SizeInBytes;
+    const UINT64 alignedDataSize = textureInfo.SizeInBytes;
 
-    CD3DX12_HEAP_DESC heapDesc(
+    const CD3DX12_HEAP_DESC heapDesc(
         m_NUM_BUFFERS * alignedDataSize,
         D3D12_HEAP_TYPE_DEFAULT,
         0, // An alias for 64KB. See documentation for D3D12_HEAP_DESC
@@ -172,11 +179,11 @@ void Compute::CreateSharedBuffers()
             nullptr,
             IID_PPV_ARGS(&m_positionBuffers[i])));
 
-        CD3DX12_CPU_DESCRIPTOR_HANDLE heapHandle(
+        const CD3DX12_CPU_DESCRIPTOR_HANDLE heapHandle(
             m_srvHeap->GetCPUDescriptorHandleForHeapStart(),
-            UavParticlePos0 + i, m_srvUavDescriptorSize);
-        m_device->CreateUnorderedAccessView(m_positionBuffers[i].Get(),
-            nullptr, &uavDesc, heapHandle);
+            UavParticlePos0 + i,
+            m_srvUavDescriptorSize);
+        m_device->CreateUnorderedAccessView(m_positionBuffers[i].Get(), nullptr, &uavDesc, heapHandle);
 
         ThrowIfFailed(m_device->CreateCommittedResource(
             &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
@@ -186,29 +193,35 @@ void Compute::CreateSharedBuffers()
             nullptr,
             IID_PPV_ARGS(&m_velocityBuffers[i])));
 
-        CD3DX12_CPU_DESCRIPTOR_HANDLE velHeapHandle(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), UavParticleVel0 + i, m_srvUavDescriptorSize);
+        const CD3DX12_CPU_DESCRIPTOR_HANDLE velHeapHandle(
+            m_srvHeap->GetCPUDescriptorHandleForHeapStart(),
+            UavParticleVel0 + i,
+            m_srvUavDescriptorSize);
         m_device->CreateUnorderedAccessView(m_velocityBuffers[i].Get(), nullptr, &velocityDesc, velHeapHandle);
     }
 
-    CD3DX12_CPU_DESCRIPTOR_HANDLE copyPosHandle(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), UavParticlePos0Copy, m_srvUavDescriptorSize);
+    const CD3DX12_CPU_DESCRIPTOR_HANDLE copyPosHandle(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), UavParticlePos0Copy, m_srvUavDescriptorSize);
     m_device->CreateUnorderedAccessView(m_positionBuffers[0].Get(), nullptr, &uavDesc, copyPosHandle);
 
-    CD3DX12_CPU_DESCRIPTOR_HANDLE copyVelHandle(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), UavParticleVel0Copy, m_srvUavDescriptorSize);
+    const CD3DX12_CPU_DESCRIPTOR_HANDLE copyVelHandle(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), UavParticleVel0Copy, m_srvUavDescriptorSize);
     m_device->CreateUnorderedAccessView(m_velocityBuffers[0].Get(), nullptr, &velocityDesc, copyVelHandle);
 }
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 Compute::Compute(UINT in_numParticles,
-    Microsoft::WRL::ComPtr<IDXGIAdapter1> in_adapter,
+    ComPtr<IDXGIAdapter1> in_adapter,
     bool in_useIntelCommandQueueExtension,
-    Compute* in_pCompute) :
-    m_numParticles(in_numParticles),
-    m_frameFenceValues{}
+    Compute* in_pCompute)
+    : m_numParticles(in_numParticles)
+    , m_pExtensionHelper(nullptr)
+    , m_srvUavDescriptorSize(0)
+    , m_fenceEvent(nullptr)
+    , m_bufferIndex(0)
+    , m_frameFenceValues{}
+    , m_fenceValue(0)
 {
-    m_bufferIndex = 0;
     m_usingIntelCommandQueueExtension = in_useIntelCommandQueueExtension;
-    m_fenceValue = 0;
 
     Initialize(in_adapter);
 
@@ -229,10 +242,24 @@ Compute::Compute(UINT in_numParticles,
 Compute::~Compute()
 {
     WaitForGpu();
+
     delete m_pExtensionHelper;
 
-    CloseHandle(m_sharedHandles.m_heap);
-    CloseHandle(m_sharedHandles.m_fence);
+    if (m_usingIntelCommandQueueExtension)
+    {
+        // INTC extension seems to internally increase ref count.
+        // Can't use ComPtr<T>::Reset() here!
+        m_commandQueue->Release();
+    }
+
+    BOOL rv = ::CloseHandle(m_sharedHandles.m_heap);
+    assert(rv != FALSE);
+
+    rv = ::CloseHandle(m_sharedHandles.m_fence);
+    assert(rv != FALSE);
+
+    rv = ::CloseHandle(m_fenceEvent);
+    assert(rv != FALSE);
 }
 
 //-----------------------------------------------------------------------------
@@ -244,15 +271,15 @@ void Compute::CopyState(Compute* in_pCompute)
     // open shared buffers
     //---------------------------------------------------------------
     ComPtr<ID3D12Heap> sharedHeap;
-    m_device->OpenSharedHandle(in_pCompute->m_sharedHandles.m_heap, IID_PPV_ARGS(&sharedHeap));
+    ThrowIfFailed(m_device->OpenSharedHandle(in_pCompute->m_sharedHandles.m_heap, IID_PPV_ARGS(&sharedHeap)));
 
-    D3D12_RESOURCE_DESC crossAdapterDesc = CD3DX12_RESOURCE_DESC::Buffer(
+    const D3D12_RESOURCE_DESC crossAdapterDesc = CD3DX12_RESOURCE_DESC::Buffer(
         in_pCompute->m_sharedHandles.m_alignedDataSize,
         D3D12_RESOURCE_FLAG_ALLOW_CROSS_ADAPTER);
 
     ComPtr<ID3D12Resource> srcBuffer[m_NUM_BUFFERS];
 
-    for (int i = 0; i < m_NUM_BUFFERS; i++)
+    for (UINT i = 0; i < m_NUM_BUFFERS; i++)
     {
         ThrowIfFailed(m_device->CreatePlacedResource(
             sharedHeap.Get(),
@@ -266,27 +293,29 @@ void Compute::CopyState(Compute* in_pCompute)
     //---------------------------------------------------------------
     // copy the position data from the other compute device
     //---------------------------------------------------------------
-    m_commandAllocators[m_bufferIndex]->Reset();
-    ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
-
-    for (int i = 0; i < m_NUM_BUFFERS; i++)
     {
-        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_positionBuffers[i].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST));
+        ThrowIfFailed(m_commandAllocators[m_bufferIndex]->Reset());
+        ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
 
-        m_commandList->CopyBufferRegion(
-            m_positionBuffers[i].Get(), 0,
-            srcBuffer[i].Get(), 0,
-            m_numParticles * sizeof(Render::Particle));
+        for (UINT i = 0; i < m_NUM_BUFFERS; i++)
+        {
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_positionBuffers[i].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST));
 
-        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_positionBuffers[i].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE));
+            m_commandList->CopyBufferRegion(
+                m_positionBuffers[i].Get(), 0,
+                srcBuffer[i].Get(), 0,
+                m_numParticles * sizeof(Render::Particle));
+
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_positionBuffers[i].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE));
+        }
+
+        ThrowIfFailed(m_commandList->Close());
+
+        ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
+        m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
+
+        WaitForGpu();
     }
-
-    ThrowIfFailed(m_commandList->Close());
-    ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
-    m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
-
-    // wait for this to complete
-    WaitForGpu();
 
     //---------------------------------------------------------------
     // within the other adapter, copy the velocity buffers into the shared position buffers
@@ -296,41 +325,43 @@ void Compute::CopyState(Compute* in_pCompute)
         in_pCompute->m_commandAllocators[m_bufferIndex]->Reset();
         ThrowIfFailed(in_pCompute->m_commandList->Reset(in_pCompute->m_commandAllocators[m_bufferIndex].Get(), in_pCompute->m_computeState.Get()));
 
-        for (int i = 0; i < m_NUM_BUFFERS; i++)
+        for (UINT i = 0; i < m_NUM_BUFFERS; i++)
         {
             in_pCompute->m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(in_pCompute->m_positionBuffers[i].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST));
             in_pCompute->m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(in_pCompute->m_velocityBuffers[i].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
-
 
             in_pCompute->m_commandList->CopyBufferRegion(
                 in_pCompute->m_positionBuffers[i].Get(), 0,
                 in_pCompute->m_velocityBuffers[i].Get(), 0,
                 m_numParticles * sizeof(ParticleVelocity));
         }
+
         ThrowIfFailed(in_pCompute->m_commandList->Close());
+
         ID3D12CommandList* ppCommandLists[] = { in_pCompute->m_commandList.Get() };
         in_pCompute->m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
 
         in_pCompute->WaitForGpu();
     }
 
-    m_commandAllocators[m_bufferIndex]->Reset();
-    ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
-
-    for (int i = 0; i < m_NUM_BUFFERS; i++)
     {
-        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_velocityBuffers[i].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST));
+        ThrowIfFailed(m_commandAllocators[m_bufferIndex]->Reset());
+        ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
 
-        m_commandList->CopyBufferRegion(
-            m_velocityBuffers[i].Get(), 0,
-            srcBuffer[i].Get(), 0,
-            m_numParticles * sizeof(ParticleVelocity));
+        for (UINT i = 0; i < m_NUM_BUFFERS; i++)
+        {
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_velocityBuffers[i].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST));
 
-        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_velocityBuffers[i].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
-    }
+            m_commandList->CopyBufferRegion(
+                m_velocityBuffers[i].Get(), 0,
+                srcBuffer[i].Get(), 0,
+                m_numParticles * sizeof(ParticleVelocity));
 
-    {
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_velocityBuffers[i].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+        }
+
         ThrowIfFailed(m_commandList->Close());
+
         ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
         m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
     }
@@ -351,10 +382,10 @@ void Compute::SetAdapter(ComPtr<IDXGIAdapter1> in_adapter)
     m_usingIntelCommandQueueExtension = m_usingIntelCommandQueueExtension && m_pExtensionHelper->GetEnabled();
     CreateCommandQueue();
 
-    for (int i = 0; i < m_NUM_BUFFERS; i++)
+    for (UINT i = 0; i < m_NUM_BUFFERS; i++)
     {
         ThrowIfFailed(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COMPUTE, IID_PPV_ARGS(&m_commandAllocators[i])));
-        std::wstringstream cmdAllocName;
+        std::wostringstream cmdAllocName;
         cmdAllocName << "Compute CmdAlloc " << i;
         m_commandAllocators[i]->SetName(cmdAllocName.str().c_str());
     }
@@ -366,14 +397,13 @@ void Compute::SetAdapter(ComPtr<IDXGIAdapter1> in_adapter)
     ThrowIfFailed(m_device->CreateSharedHandle(m_fence.Get(), nullptr, GENERIC_ALL, 0/*L"COMPUTE_FENCE"*/, &m_sharedHandles.m_fence));
     m_fenceValue++;
 
-    m_fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    m_fenceEvent = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
     if (m_fenceEvent == nullptr)
     {
         ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
     }
 
     // create timer on the command queue
-    delete m_pTimer;
     m_pTimer = new D3D12GpuTimer(m_device.Get(), m_commandQueue.Get(), static_cast<UINT>(GpuTimers::NumTimers));
     m_pTimer->SetTimerName(static_cast<UINT>(GpuTimers::Simulate), "simulate ms");
 }
@@ -390,7 +420,7 @@ void Compute::Initialize(ComPtr<IDXGIAdapter1> in_adapter)
     // Compute root signature.
     {
         // one UAV range of 2 registers, u0 and u1
-        CD3DX12_DESCRIPTOR_RANGE1 uavRanges[] = {
+        const CD3DX12_DESCRIPTOR_RANGE1 uavRanges[] = {
             CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 5, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE)
         };
 
@@ -402,7 +432,6 @@ void Compute::Initialize(ComPtr<IDXGIAdapter1> in_adapter)
         computeRootSignatureDesc.Init_1_1(_countof(rootParameters), rootParameters, 0, nullptr);
 
         D3D12_FEATURE_DATA_ROOT_SIGNATURE featureData = {};
-
         // This is the highest version the sample supports. If CheckFeatureSupport succeeds, the HighestVersion returned will not be greater than this.
         featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_1;
 
@@ -415,29 +444,34 @@ void Compute::Initialize(ComPtr<IDXGIAdapter1> in_adapter)
 
     // Create the pipeline states, which includes compiling and loading shaders.
     {
+        // Load and compile shaders.
+        ID3DBlob* pErrorMsgs = nullptr;
         ComPtr<ID3DBlob> computeShader;
 
 #if defined(_DEBUG)
         // Enable better shader debugging with the graphics debugging tools.
-        UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+        const UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
 #else
-        UINT compileFlags = 0;
+        const UINT compileFlags = 0;
 #endif
 
-        // Load and compile shaders.
-        D3D_SHADER_MACRO macros[] = { { "blocksize", STRINGIFY(BLOCK_SIZE) }, { NULL, NULL} };
-        ID3DBlob* pErrorMsgs = 0;
+        const D3D_SHADER_MACRO macros[] = { { "blocksize", STRINGIFY(BLOCK_SIZE) }, { nullptr, nullptr} };
 
         const wchar_t* pShaderName = L"NBodyGravityCS.hlsl";
+        const std::wstring fullShaderPath = GetAssetFullPath(pShaderName);
 
-        //ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(pShaderName).c_str(), macros, nullptr, "CSMain", "cs_5_0", compileFlags, 0, &computeShader, &pErrorMsgs));
-        HRESULT hr = D3DCompileFromFile(GetAssetFullPath(pShaderName).c_str(), macros, nullptr, "CSMain", "cs_5_0", compileFlags, 0, &computeShader, &pErrorMsgs);
-        char* pMessage = 0;
+        const HRESULT hr = ::D3DCompileFromFile(fullShaderPath.c_str(), macros, nullptr, "CSMain", "cs_5_0", compileFlags, 0, &computeShader, &pErrorMsgs);
         if (FAILED(hr))
         {
-            pMessage = (char*)pErrorMsgs->GetBufferPointer();
+            if (pErrorMsgs != nullptr)
+            {
+                const char* pMessage = (const char*)pErrorMsgs->GetBufferPointer();
+                ::OutputDebugStringA(pMessage);
+                pErrorMsgs->Release();
+            }            
             ThrowIfFailed(hr);
         }
+
         // Describe and create the compute pipeline state object (PSO).
         D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
         computePsoDesc.pRootSignature = m_rootSignature.Get();
@@ -491,7 +525,8 @@ void Compute::Initialize(ComPtr<IDXGIAdapter1> in_adapter)
     }
 
     // close command buffer & execute to initialize gpu resources
-    m_commandList->Close();
+    ThrowIfFailed(m_commandList->Close());
+
     ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
     m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
 
@@ -506,6 +541,93 @@ void Compute::Initialize(ComPtr<IDXGIAdapter1> in_adapter)
     CreateSharedBuffers();
 }
 
+
+
+
+#define USE_ORIG 0
+#define USE_SCALAR_OPTIMIZED 0
+#define USE_SIMD_OPTIMIZED 1
+
+#if (USE_ORIG + USE_SCALAR_OPTIMIZED + USE_SIMD_OPTIMIZED) != 1
+#error "use one of the options"
+#endif
+
+#define FAST_SIMD_RAND_COMPATABILITY
+//#define BENCHMARK
+
+//-----------------------------------------------------------------------------
+// fast rand version
+// see https://software.intel.com/en-us/articles/fast-random-number-generator-on-the-intel-pentiumr-4-processor
+//-----------------------------------------------------------------------------
+thread_local
+unsigned int g_seed = 0;
+
+inline void fast_srand(int seed)
+{
+    g_seed = seed;
+}
+
+// returns one integer, similar output value range as C lib
+inline int fast_rand()
+{
+    g_seed = 214013 * g_seed + 2531011;
+    return (g_seed >> 16) & 0x7FFF;
+}
+
+
+//-----------------------------------------------------------------------------
+// faster SIMD rand version
+// see https://software.intel.com/en-us/articles/fast-random-number-generator-on-the-intel-pentiumr-4-processor
+//-----------------------------------------------------------------------------
+
+#include <emmintrin.h>
+
+thread_local
+__m128i g_simd_seed;
+
+void srand_sse(unsigned int seed)
+{
+    g_simd_seed = _mm_set_epi32(seed, seed + 1, seed, seed + 1);
+}
+
+inline __m128i __vectorcall  rand_sse()
+{
+    __declspec(align(16)) /*static*/ const unsigned int mult[4]   = { 214013, 17405, 214013, 69069 };
+    __declspec(align(16)) /*static*/ const unsigned int gadd[4]   = { 2531011, 10395331, 13737667, 1 };
+    __declspec(align(16)) /*static*/ const unsigned int mask[4]   = { 0xFFFFFFFF, 0, 0xFFFFFFFF, 0 };
+    __declspec(align(16)) /*static*/ const unsigned int masklo[4] = { 0x00007FFF, 0x00007FFF, 0x00007FFF, 0x00007FFF };
+
+    const __m128i adder = _mm_load_si128((__m128i*) gadd);
+    __m128i multiplier = _mm_load_si128((__m128i*) mult);
+    const __m128i mod_mask = _mm_load_si128((__m128i*) mask);
+    const __m128i sra_mask = _mm_load_si128((__m128i*) masklo);
+    __m128i cur_seed_split = _mm_shuffle_epi32(g_simd_seed, _MM_SHUFFLE(2, 3, 0, 1));
+
+    g_simd_seed = _mm_mul_epu32(g_simd_seed, multiplier);
+    multiplier = _mm_shuffle_epi32(multiplier, _MM_SHUFFLE(2, 3, 0, 1));
+    cur_seed_split = _mm_mul_epu32(cur_seed_split, multiplier);
+    g_simd_seed = _mm_and_si128(g_simd_seed, mod_mask);
+    cur_seed_split = _mm_and_si128(cur_seed_split, mod_mask);
+    cur_seed_split = _mm_shuffle_epi32(cur_seed_split, _MM_SHUFFLE(2, 3, 0, 1));
+    g_simd_seed = _mm_or_si128(g_simd_seed, cur_seed_split);
+    g_simd_seed = _mm_add_epi32(g_simd_seed, adder);
+
+#if defined(FAST_SIMD_RAND_COMPATABILITY)
+
+    // Add the lines below if you wish to reduce your results to 16-bit vals...
+    __m128i sseresult = _mm_srai_epi32(g_simd_seed, 16);
+    sseresult = _mm_and_si128(sseresult, sra_mask);
+    return sseresult;
+
+#else
+
+    return g_simd_seed;
+
+#endif
+}
+
+#include "Timer.h"
+
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 void LoadParticles(
@@ -513,12 +635,24 @@ void LoadParticles(
     _Out_writes_(numParticles) Compute::ParticleVelocity* out_pVelocities,
     const XMFLOAT3& center, const float initialSpeed, float spread, UINT numParticles)
 {
+#ifdef BENCHMARK
+    Timer t;
+    t.Start();
+#endif
+
+#if USE_ORIG == 1
+    // those are not thread safe
     std::random_device randomDevice;  //Will be used to obtain a seed for the random number engine
     std::mt19937 gen(randomDevice()); //Standard mersenne_twister_engine seeded with rd()
     std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+#endif
 
     concurrency::parallel_for(UINT(0), numParticles, [&](UINT i)
         {
+#if USE_ORIG == 1
+
+            // "original version"
+
             XMVECTOR delta = XMVectorSet(dist(gen), dist(gen), dist(gen), 0);
             while (XMVectorGetX(XMVector3LengthSq(delta)) < 10.0f)
             {
@@ -538,8 +672,111 @@ void LoadParticles(
             out_pVelocities[i].velocity.x = XMVectorGetX(vel);
             out_pVelocities[i].velocity.y = XMVectorGetY(vel);
             out_pVelocities[i].velocity.z = XMVectorGetZ(vel);
+
+#elif USE_SCALAR_OPTIMIZED == 1
+
+            // "first batch of optimizations"
+            // -using fast rand
+            // -hoisting out scalar factor for 1 multiplication
+            // -don't use very inefficient loads and stores
+            // -SSA form
+            // -const
+
+            // collapse all multiplication factors into one
+            // floating point accuracy / determinism (order of ops) aside, this is good enough for this workload
+            constexpr float k_scale = (1.f / (float)RAND_MAX) * 2.f;
+
+            float x = ((float)fast_rand() * k_scale) - 1.f;
+            float y = ((float)fast_rand() * k_scale) - 1.f;
+            float z = ((float)fast_rand() * k_scale) - 1.f;
+
+            XMVECTOR delta = XMVectorSet(x, y, z, 0.f);
+            while (XMVectorGetX(XMVector3LengthSq(delta)) < 10.f)
+            {
+                x = ((float)fast_rand() * k_scale) - 1.f;
+                y = ((float)fast_rand() * k_scale) - 1.f;
+                z = ((float)fast_rand() * k_scale) - 1.f;
+
+                const XMVECTOR random = XMVectorSet(x, y, z, 0.f);
+                delta = XMVectorAdd(delta, random);
+            }
+
+            delta = XMVector3Normalize(delta);
+            delta = XMVectorScale(delta, spread);
+
+            const XMVECTOR centerSimd = XMLoadFloat3(&center);
+            const XMVECTOR position = XMVectorAdd(centerSimd, delta);
+            XMStoreFloat4(&out_pParticles[i].position, position);
+
+            // create a velocity perpindicular-ish to the direction to the center of gravity
+            const XMVECTOR direction = XMVector3NormalizeEst(XMLoadFloat3((XMFLOAT3*)&out_pParticles[i].position));
+            const XMVECTOR perp = XMVector3NormalizeEst(XMVectorSubtract(XMVectorSet(1.f, 1.f, 1.f, 0.f), direction));
+            const XMVECTOR vel = XMVectorScale(XMVector3Cross(direction, perp), initialSpeed);
+            XMStoreFloat3(&out_pVelocities[i].velocity, vel);
+
+#elif USE_SIMD_OPTIMIZED == 1
+
+            const XMVECTOR limit = XMVectorSet(10.f, 10.f, 10.f, 10.f);
+            XMVECTOR delta = g_XMZero;
+            XMVECTOR deltaLengthSq = g_XMZero;
+
+            // collapse all multiplication factors into one
+            // floating point accuracy / determinism (order of ops) aside, this is good enough for this workload
+            constexpr float k_scale = (1.f / (float)RAND_MAX) * 2.f;
+
+            const __m128 k_scale_v = _mm_set_ps(k_scale, k_scale, k_scale, k_scale);
+            const __m128 k_one = _mm_set_ps(1.f, 1.f, 1.f, 1.f);
+
+            do
+            {
+                const __m128i rand_vi = rand_sse();
+                __m128 rand_vf = _mm_cvtepi32_ps(rand_vi);
+
+                rand_vf = _mm_mul_ps(rand_vf, k_scale_v);
+                rand_vf = _mm_sub_ps(rand_vf, k_one);
+
+                const XMVECTOR random = rand_vf;
+
+                delta = XMVectorAdd(delta, random);
+                deltaLengthSq = XMVector3LengthSq(delta);
+            }
+            while (XMVector3Less(deltaLengthSq, limit));
+
+            delta = XMVector3Normalize(delta);
+            delta = XMVectorScale(delta, spread);
+
+            const XMVECTOR centerSimd = XMLoadFloat3(&center);
+
+            const XMVECTOR position = XMVectorAdd(centerSimd, delta);
+            XMStoreFloat4(&out_pParticles[i].position, position);
+
+            // create a velocity perpindicular-ish to the direction to the center of gravity
+            const XMVECTOR direction = XMVector3NormalizeEst(XMLoadFloat3((XMFLOAT3*)&out_pParticles[i].position));
+            const XMVECTOR perp = XMVector3NormalizeEst(XMVectorSubtract(XMVectorSet(1.f, 1.f, 1.f, 0.f), direction));
+            const XMVECTOR vel = XMVectorScale(XMVector3Cross(direction, perp), initialSpeed);
+            XMStoreFloat3(&out_pVelocities[i].velocity, vel);
+
+#endif
     });
+
+#ifdef BENCHMARK
+    t.Stop();
+
+    char buffer[255];
+    sprintf_s(buffer, 255, "\nLoad Particles: %s %f\n", 
+#if USE_ORIG == 1
+        "USE_OLD_ORIG",
+#elif USE_SCALAR_OPTIMIZED == 1
+        "USE_SCALAR_OPTIMIZED",
+#elif USE_SIMD_OPTIMIZED == 1
+        "USE_SIMD_OPTIMIZED",
+#endif
+        t.GetTime());
+
+    ::OutputDebugStringA(buffer);
+#endif
 }
+
 
 //-----------------------------------------------------------------------------
 // initialize particle positions.
@@ -548,6 +785,8 @@ void LoadParticles(
 //-----------------------------------------------------------------------------
 void Compute::InitializeParticles()
 {
+    assert(m_numParticles != 0);
+
     // Initialize the data in the buffers.
     std::vector<Render::Particle> positions;
     positions.resize(m_numParticles);
@@ -556,7 +795,7 @@ void Compute::InitializeParticles()
     velocities.resize(m_numParticles);
 
     // Split the particles into two groups.
-    float centerSpread = ParticleSpread * 0.750f;
+    const float centerSpread = ParticleSpread * 0.750f;
     LoadParticles(
         &positions[0], &velocities[0],
         XMFLOAT3(centerSpread, 0, 0),
@@ -574,8 +813,8 @@ void Compute::InitializeParticles()
     // upload positions
     //-------------------------------------------------------------------------
     const UINT dataSize = m_numParticles * sizeof(Render::Particle);
-    D3D12_HEAP_PROPERTIES uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-    D3D12_RESOURCE_DESC uploadBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(dataSize);
+    const D3D12_HEAP_PROPERTIES uploadHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+    const D3D12_RESOURCE_DESC uploadBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(dataSize);
 
     ComPtr<ID3D12Resource> particleBufferUpload;
     ThrowIfFailed(m_device->CreateCommittedResource(
@@ -591,12 +830,11 @@ void Compute::InitializeParticles()
     particleData.RowPitch = dataSize;
     particleData.SlicePitch = particleData.RowPitch;
 
-    ID3D12GraphicsCommandList* pCommandList = m_commandList.Get();
-    m_commandAllocators[m_bufferIndex]->Reset();
+    ThrowIfFailed(m_commandAllocators[m_bufferIndex]->Reset());
     ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
 
     {
-        CD3DX12_RESOURCE_BARRIER barriers[] =
+        const CD3DX12_RESOURCE_BARRIER barriers[] =
         {
             CD3DX12_RESOURCE_BARRIER::Transition(m_positionBuffers[0].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST),
             CD3DX12_RESOURCE_BARRIER::Transition(m_positionBuffers[1].Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST),
@@ -612,8 +850,9 @@ void Compute::InitializeParticles()
     //-------------------------------------------------------------------------
     // upload velocities
     //-------------------------------------------------------------------------
-    UINT64 velocityBufferSize = m_numParticles * sizeof(ParticleVelocity);
-    D3D12_RESOURCE_DESC velocityBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(velocityBufferSize);
+    const UINT64 velocityBufferSize = m_numParticles * sizeof(ParticleVelocity);
+    const D3D12_RESOURCE_DESC velocityBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(velocityBufferSize);
+
     ComPtr<ID3D12Resource> velocityBufferUpload;
     ThrowIfFailed(m_device->CreateCommittedResource(
         &uploadHeapProperties,
@@ -623,7 +862,6 @@ void Compute::InitializeParticles()
         nullptr,
         IID_PPV_ARGS(&velocityBufferUpload)));
 
-    D3D12_SUBRESOURCE_DATA velocityData = {};
     particleData.pData = reinterpret_cast<UINT8*>(&velocities[0]);
     particleData.RowPitch = velocityBufferSize;
     particleData.SlicePitch = particleData.RowPitch;
@@ -632,7 +870,7 @@ void Compute::InitializeParticles()
     UpdateSubresources<1>(m_commandList.Get(), m_velocityBuffers[1].Get(), velocityBufferUpload.Get(), 0, 0, 1, &particleData);
 
     {
-        CD3DX12_RESOURCE_BARRIER barriers[] =
+        const CD3DX12_RESOURCE_BARRIER barriers[] =
         {
             CD3DX12_RESOURCE_BARRIER::Transition(m_positionBuffers[0].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE),
             CD3DX12_RESOURCE_BARRIER::Transition(m_positionBuffers[1].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE),
@@ -642,9 +880,11 @@ void Compute::InitializeParticles()
         m_commandList->ResourceBarrier(_countof(barriers), barriers);
     }
 
-    ThrowIfFailed(pCommandList->Close());
-    ID3D12CommandList* ppCommandLists[] = { pCommandList };
+    ThrowIfFailed(m_commandList->Close());
+
+    ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
     m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
+
     WaitForGpu();
 }
 
@@ -661,14 +901,15 @@ void Compute::WaitForGpu()
     m_fenceValue++;
 
     // Wait until the signal command has been processed.
-    WaitForSingleObject(m_fenceEvent, INFINITE);
+    const DWORD rv = ::WaitForSingleObject(m_fenceEvent, INFINITE);
+    assert(rv == WAIT_OBJECT_0);
 }
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-Compute::SharedHandles Compute::GetSharedHandles(HANDLE in_fenceHandle)
+const Compute::SharedHandles& Compute::GetSharedHandles(HANDLE in_fenceHandle)
 {
-    m_device->OpenSharedHandle(in_fenceHandle, IID_PPV_ARGS(&m_sharedFence));
+    ThrowIfFailed(m_device->OpenSharedHandle(in_fenceHandle, IID_PPV_ARGS(&m_sharedFence)));
 
     m_sharedHandles.m_bufferIndex = m_bufferIndex;
     return m_sharedHandles;
@@ -699,15 +940,15 @@ void Compute::Simulate(int in_numActiveParticles, UINT64 in_sharedFenceValue)
     // /previous/ copy must complete before overwriting the old state
     ThrowIfFailed(m_commandQueue->Wait(m_sharedFence.Get(), in_sharedFenceValue-1));
 
-    UINT oldIndex = m_bufferIndex; // 0 or 1. Old corresponds to the surface the render device is currently using
-    UINT newIndex = 1 - oldIndex;  // 1 or 0. New corresponds to the surface the render device is NOT using
+    const UINT oldIndex = m_bufferIndex; // 0 or 1. Old corresponds to the surface the render device is currently using
+    const UINT newIndex = 1 - oldIndex;  // 1 or 0. New corresponds to the surface the render device is NOT using
 
-    m_commandAllocators[m_bufferIndex]->Reset();
+    ThrowIfFailed(m_commandAllocators[m_bufferIndex]->Reset());
     ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
 
     m_pTimer->BeginTimer(m_commandList.Get(), static_cast<std::uint32_t>(GpuTimers::Simulate));
 
-    UINT srcHeapIndex = UavParticlePos0 + oldIndex; // 0 or 1
+    const UINT srcHeapIndex = UavParticlePos0 + oldIndex; // 0 or 1
 
     ID3D12DescriptorHeap* ppHeaps[] = { m_srvHeap.Get() };
     m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
@@ -719,7 +960,7 @@ void Compute::Simulate(int in_numActiveParticles, UINT64 in_sharedFenceValue)
     // set heap base to point at previous simulation results
     // note that descriptor heap[2] is a copy of heap[0], so when the base is heap[1] the dest is heap[2]==heap[0]
     //-------------------------------------------------
-    CD3DX12_GPU_DESCRIPTOR_HANDLE srcHeapHandle(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), srcHeapIndex, m_srvUavDescriptorSize);
+    const CD3DX12_GPU_DESCRIPTOR_HANDLE srcHeapHandle(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), srcHeapIndex, m_srvUavDescriptorSize);
     m_commandList->SetComputeRootDescriptorTable(ComputeRootUAVTable, srcHeapHandle);
 
     //-------------------------------------------------
@@ -735,6 +976,7 @@ void Compute::Simulate(int in_numActiveParticles, UINT64 in_sharedFenceValue)
     m_pTimer->ResolveAllTimers(m_commandList.Get());
 
     ThrowIfFailed(m_commandList->Close());
+
     ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
     m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
 

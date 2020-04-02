@@ -33,13 +33,12 @@
 class Timer
 {
 public:
+    Timer();
     void   Start();
 	double Stop() const { return GetTime(); }
 	double GetTime() const;
 
-    Timer();
 private:
-
     LARGE_INTEGER m_startTime;
     LARGE_INTEGER m_performanceFrequency;
     double m_oneOverTicksPerSecond;
@@ -49,7 +48,8 @@ private:
 //-----------------------------------------------------------------------------
 inline Timer::Timer()
 {
-    QueryPerformanceFrequency(&m_performanceFrequency);
+    m_startTime.QuadPart = 0;
+    ::QueryPerformanceFrequency(&m_performanceFrequency);
     m_oneOverTicksPerSecond = 1. / (double)m_performanceFrequency.QuadPart;
 }
 
@@ -57,7 +57,7 @@ inline Timer::Timer()
 //-----------------------------------------------------------------------------
 inline void Timer::Start()
 {
-    QueryPerformanceCounter(&m_startTime);
+    ::QueryPerformanceCounter(&m_startTime);
 }
 
 //-----------------------------------------------------------------------------
@@ -66,9 +66,9 @@ inline void Timer::Start()
 inline double Timer::GetTime() const
 {
     LARGE_INTEGER endTime;
-    QueryPerformanceCounter(&endTime);
+    ::QueryPerformanceCounter(&endTime);
 
-    LONGLONG s = m_startTime.QuadPart;
-    LONGLONG e = endTime.QuadPart;
+    const LONGLONG s = m_startTime.QuadPart;
+    const LONGLONG e = endTime.QuadPart;
     return double(e-s) * m_oneOverTicksPerSecond;
 }
