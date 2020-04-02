@@ -61,7 +61,11 @@ void InitDebugLayer()
 //-----------------------------------------------------------------------------
 void Particles::ShareHandles()
 {
+    assert(m_pRender != nullptr);
+    assert(m_pCompute != nullptr);
+
     const HANDLE renderFenceHandle = m_pRender->GetSharedFenceHandle();
+    assert(renderFenceHandle != nullptr);
     m_pRender->SetShared(m_pCompute->GetSharedHandles(renderFenceHandle));
 }
 

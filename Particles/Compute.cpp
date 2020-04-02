@@ -242,6 +242,7 @@ Compute::Compute(UINT in_numParticles,
 Compute::~Compute()
 {
     WaitForGpu();
+
     delete m_pExtensionHelper;
 
     if (m_usingIntelCommandQueueExtension)
@@ -552,7 +553,7 @@ void Compute::Initialize(ComPtr<IDXGIAdapter1> in_adapter)
 #endif
 
 #define FAST_SIMD_RAND_COMPATABILITY
-#define BENCHMARK
+//#define BENCHMARK
 
 //-----------------------------------------------------------------------------
 // fast rand version
@@ -775,6 +776,7 @@ void LoadParticles(
     ::OutputDebugStringA(buffer);
 #endif
 }
+
 
 //-----------------------------------------------------------------------------
 // initialize particle positions.

@@ -149,6 +149,7 @@ inline ID3D12CommandQueue* ExtensionHelper::CreateCommandQueue(D3D12_COMMAND_QUE
         ThrowIfFailed((*m_extCreateCommandQueue)(m_pExtensionContext, &extDesc,
             IID_PPV_ARGS(&pCommandQueue)));
     }
+
     return pCommandQueue;
 }
 
