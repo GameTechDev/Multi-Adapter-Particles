@@ -128,9 +128,6 @@ void Render::CreateCommandQueue()
     desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
     desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 
-    m_commandQueue.Reset();
-    m_copyQueue.Reset();
-
     if (m_usingIntelCommandQueueExtension)
     {
         m_commandQueue = m_pExtensionHelper->CreateCommandQueue(desc);
@@ -159,6 +156,15 @@ void Render::SetUseIntelCommandQueueExtension(bool in_desiredSetting)
     in_desiredSetting = in_desiredSetting && m_pExtensionHelper->GetEnabled();
     if (m_usingIntelCommandQueueExtension != in_desiredSetting)
     {
+        // need additional cleanup when switching from using extension to not using it
+        if (m_usingIntelCommandQueueExtension)
+        {
+            // INTC extension seems to internally increase ref count.
+            // Can't use ComPtr<T>::Reset() here!
+            m_commandQueue->Release();
+            m_copyQueue->Release();
+        }
+
         m_usingIntelCommandQueueExtension = in_desiredSetting;
         CreateCommandQueue();
     }
@@ -228,6 +234,14 @@ Render::~Render()
         const CD3DX12_RANGE readRange(0, 0);
         m_constantBufferGS->Unmap(0, &readRange);
         m_pConstantBufferGSData = 0;
+    }
+
+    if (m_usingIntelCommandQueueExtension)
+    {
+        // INTC extension seems to internally increase ref count.
+        // Can't use ComPtr<T>::Reset() here!
+        m_commandQueue->Release();
+        m_copyQueue->Release();
     }
 
     BOOL rv = ::CloseHandle(m_sharedFenceHandle);

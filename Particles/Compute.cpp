@@ -81,7 +81,6 @@ void Compute::CreateCommandQueue()
     desc.Type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
     desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 
-    m_commandQueue.Reset();
     if (m_usingIntelCommandQueueExtension)
     {
         m_commandQueue = m_pExtensionHelper->CreateCommandQueue(desc);
@@ -101,6 +100,14 @@ void Compute::SetUseIntelCommandQueueExtension(bool in_desiredSetting)
     in_desiredSetting = in_desiredSetting && m_pExtensionHelper->GetEnabled();
     if (m_usingIntelCommandQueueExtension != in_desiredSetting)
     {
+        // need additional cleanup when switching from using extension to not using it
+        if (m_usingIntelCommandQueueExtension)
+        {
+            // INTC extension seems to internally increase ref count.
+            // Can't use ComPtr<T>::Reset() here!
+            m_commandQueue->Release();
+        }
+
         m_usingIntelCommandQueueExtension = in_desiredSetting;
         CreateCommandQueue();
     }
@@ -236,6 +243,13 @@ Compute::~Compute()
 {
     WaitForGpu();
     delete m_pExtensionHelper;
+
+    if (m_usingIntelCommandQueueExtension)
+    {
+        // INTC extension seems to internally increase ref count.
+        // Can't use ComPtr<T>::Reset() here!
+        m_commandQueue->Release();
+    }
 
     BOOL rv = ::CloseHandle(m_sharedHandles.m_heap);
     assert(rv != FALSE);
