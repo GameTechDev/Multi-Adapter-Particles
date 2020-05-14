@@ -70,6 +70,41 @@ void Particles::ShareHandles()
 }
 
 //-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void Particles::AssignAdapters()
+{
+    const size_t numAdapters = m_adapters.size();
+
+    // if no UMA (integrated) device is found, then:
+    // compute will be the first adapter enumerated (index 0)
+    // render will be the last adapter enumerated (# adapters - 1)
+    for (size_t i = 0; i < numAdapters; i++)
+    {
+        ComPtr<ID3D12Device> device;
+        ThrowIfFailed(::D3D12CreateDevice(m_adapters[i].Get(), MINIMUM_D3D_FEATURE_LEVEL, IID_PPV_ARGS(&device)));
+
+        // check for UMA support (uses system memory as local memory)
+        D3D12_FEATURE_DATA_ARCHITECTURE featureData = {};
+        const HRESULT hr = device->CheckFeatureSupport(D3D12_FEATURE_ARCHITECTURE, &featureData, sizeof(featureData));
+        if (SUCCEEDED(hr) && featureData.UMA)
+        {
+            m_computeAdapterIndex = int(i);
+        }
+        else
+        {
+            m_renderAdapterIndex = int(i);
+        }
+    }
+
+    // in the case where all devices are the same type (or only 1 device):
+    if (m_computeAdapterIndex == m_renderAdapterIndex)
+    {
+        m_computeAdapterIndex = 0;
+        m_renderAdapterIndex = int(numAdapters - 1);
+    }
+}
+
+//-----------------------------------------------------------------------------
 // discover adapters
 // save info so roles can be dynamically changed
 //-----------------------------------------------------------------------------
@@ -143,9 +178,7 @@ Particles::Particles(HWND in_hwnd)
     const size_t numAdapters = m_adapters.size();
     if (numAdapters > 0)
     {
-        m_renderAdapterIndex = 0;
-        // FIXME
-        m_computeAdapterIndex = int(numAdapters - 1);
+        AssignAdapters();
 
         m_pRender = new Render(m_hwnd, ParticleCount, m_adapters[m_renderAdapterIndex], m_commandQueueExtensionEnabled, m_fullScreen, m_windowInfo.rcClient);
         m_pCompute = new Compute(ParticleCount, m_adapters[m_computeAdapterIndex], m_commandQueueExtensionEnabled);

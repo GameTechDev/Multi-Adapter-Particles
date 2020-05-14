@@ -97,4 +97,7 @@ private:
     int m_numParticlesCopied;
     int m_numParticlesSimulated;
     bool m_numParticlesLinked;
+
+    // try to pick an initial state with compute->integrated and render->discrete
+    void AssignAdapters();
 };
