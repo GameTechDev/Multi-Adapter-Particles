@@ -35,8 +35,6 @@
 
 // compute shader block size
 #define BLOCK_SIZE 64
-// UI or no?
-#define IMGUI_ENABLED 1
 
 #define INITIAL_PARTICLE_SPEED 15.0f
 #define INITIAL_PARTICLE_SIZE 2.5f

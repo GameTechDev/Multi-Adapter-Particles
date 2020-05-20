@@ -921,9 +921,7 @@ HANDLE Render::Draw(int in_numActiveParticles, Particles* in_pParticles, UINT64&
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(pResource, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST));
 
         // Draw GUI last
-#if IMGUI_ENABLED
         in_pParticles->DrawGUI(m_commandList.Get());
-#endif
 
         // Indicate that the back buffer will now be used to present.
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
