@@ -114,8 +114,8 @@ Particles::Particles(HWND in_hwnd)
     , m_pRender(nullptr)
     , m_pCompute(nullptr)
 
-    , m_renderAdapterIndex(-1)
-    , m_computeAdapterIndex(-1)
+    , m_renderAdapterIndex(0)
+    , m_computeAdapterIndex(0)
 
     , m_commandQueueExtensionEnabled(false)
     , m_vsyncEnabled(true)
