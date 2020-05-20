@@ -100,4 +100,9 @@ private:
 
     // try to pick an initial state with compute->integrated and render->discrete
     void AssignAdapters();
+
+    int m_maxNumParticles;
+    bool m_enableUI;
+    bool m_enableExtensions;
+    void ParseCommandLine();
 };

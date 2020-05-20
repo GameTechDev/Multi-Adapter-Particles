@@ -29,6 +29,8 @@
 
 #include <d3d12.h>
 #include <dxgidebug.h>
+#include <shellapi.h> // for CommandLineToArgvW
+#include <functional>
 
 #include "imgui.h"
 #include "imgui_impl_win32.h"
@@ -133,7 +135,16 @@ Particles::Particles(HWND in_hwnd)
     , m_numParticlesCopied(ParticleCount)
     , m_numParticlesSimulated(ParticleCount)
     , m_numParticlesLinked(true)
+
+    , m_maxNumParticles(ParticleCount)
+    , m_enableUI(true)
+    , m_enableExtensions(true)
 {
+    ParseCommandLine();
+    m_numParticlesRendered = m_maxNumParticles;
+    m_numParticlesCopied = m_maxNumParticles;
+    m_numParticlesSimulated = m_maxNumParticles;
+
     m_windowInfo.cbSize = sizeof(WINDOWINFO);
     const BOOL rv = ::GetWindowInfo(m_hwnd, &m_windowInfo);
     assert(rv);
@@ -180,8 +191,8 @@ Particles::Particles(HWND in_hwnd)
     {
         AssignAdapters();
 
-        m_pRender = new Render(m_hwnd, ParticleCount, m_adapters[m_renderAdapterIndex], m_commandQueueExtensionEnabled, m_fullScreen, m_windowInfo.rcClient);
-        m_pCompute = new Compute(ParticleCount, m_adapters[m_computeAdapterIndex], m_commandQueueExtensionEnabled);
+        m_pRender = new Render(m_hwnd, m_maxNumParticles, m_adapters[m_renderAdapterIndex], m_commandQueueExtensionEnabled, m_fullScreen, m_windowInfo.rcClient);
+        m_pCompute = new Compute(m_maxNumParticles, m_adapters[m_computeAdapterIndex], m_commandQueueExtensionEnabled);
 
         ShareHandles();
 
@@ -193,23 +204,24 @@ Particles::Particles(HWND in_hwnd)
         throw;
     }
 
-#if IMGUI_ENABLED
-    //-----------------------------
-    // one-time UI setup
-    //-----------------------------
+    if (m_enableUI)
     {
-        IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
-        ImGuiIO& io = ImGui::GetIO(); (void)io;
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableSetMousePos + ImGuiBackendFlags_HasSetMousePos;  // Enable Keyboard Controls
+        //-----------------------------
+        // one-time UI setup
+        //-----------------------------
+        {
+            IMGUI_CHECKVERSION();
+            ImGui::CreateContext();
+            ImGuiIO& io = ImGui::GetIO(); (void)io;
+            io.ConfigFlags |= ImGuiConfigFlags_NavEnableSetMousePos + ImGuiBackendFlags_HasSetMousePos;  // Enable Keyboard Controls
 
-        ImGui::StyleColorsDark();
-        ImGui_ImplWin32_Init(m_hwnd);
+            ImGui::StyleColorsDark();
+            ImGui_ImplWin32_Init(m_hwnd);
+        }
+
+        // render device specific setup
+        InitGui();
     }
-
-    // render device specific setup
-    InitGui();
-#endif
 
     // start frame duration timer
     m_frameTimer.Start();
@@ -223,13 +235,70 @@ Particles::~Particles()
     delete m_pCompute;
     delete m_pRender;
 
-#if IMGUI_ENABLED
-    ImGui_ImplDX12_Shutdown();
-    ImGui_ImplWin32_Shutdown();
-    ImGui::DestroyContext(nullptr);
-#endif
+    if (m_enableUI)
+    {
+        ImGui_ImplDX12_Shutdown();
+        ImGui_ImplWin32_Shutdown();
+        ImGui::DestroyContext(nullptr);
+    }
 }
 
+//-----------------------------------------------------------------------------
+// parse command line
+//-----------------------------------------------------------------------------
+class ArgParser
+{
+public:
+    void AddArg(std::wstring s, std::function<void(std::wstring)> f)
+    {
+        m_args.push_back(ArgPair(s, f));
+    }
+    void Parse()
+    {
+        int numArgs = 0;
+        LPWSTR* cmdLine = CommandLineToArgvW(GetCommandLineW(), &numArgs);
+        for (int i = 0; i < numArgs; i++)
+        {
+            for (auto& arg : m_args)
+            {
+                arg.TestEqual(cmdLine[i], (i < numArgs - 1) ? cmdLine[i + 1] : L"");
+            }
+        }
+    }
+private:
+    class ArgPair
+    {
+    public:
+        ArgPair(std::wstring s, std::function<void(std::wstring)> f) : m_arg(s), m_func(f)
+        {
+            for (auto& c : m_arg) { c = ::towlower(c); }
+        }
+        void TestEqual(std::wstring in_arg, const WCHAR* in_value)
+        {
+            for (auto& c : in_arg) { c = ::towlower(c); }
+            if (m_arg == in_arg)
+            {
+                m_func(in_value);
+            }
+        }
+    private:
+        std::wstring m_arg;
+        std::function<void(std::wstring)> m_func;
+    };
+
+    std::vector < ArgPair > m_args;
+};
+
+void Particles::ParseCommandLine()
+{
+    ArgParser argParser;
+    argParser.AddArg(L"numparticles", [=](std::wstring s) { m_maxNumParticles = std::stoi(s); });
+    argParser.AddArg(L"nogui", [=](std::wstring) { m_enableUI = false; });
+    argParser.AddArg(L"noext", [=](std::wstring) { m_enableExtensions = false; });
+    argParser.AddArg(L"size", [=](std::wstring s) { m_particleSize = std::stof(s); });
+    argParser.AddArg(L"intensity", [=](std::wstring s) { m_particleIntensity = std::stof(s); });
+    argParser.Parse();
+}
 
 //-----------------------------------------------------------------------------
 // Initialize UI resources
@@ -238,6 +307,10 @@ Particles::~Particles()
 //-----------------------------------------------------------------------------
 void Particles::InitGui()
 {
+    if (!m_enableUI)
+    {
+        return;
+    }
     m_srvHeap.Reset();
     
     ID3D12Device* pDevice = m_pRender->GetDevice();
@@ -266,6 +339,11 @@ void Particles::InitGui()
 //-----------------------------------------------------------------------------
 void Particles::DrawGUI(ID3D12GraphicsCommandList* in_pCommandList)
 {
+    if (!m_enableUI)
+    {
+        return;
+    }
+
     const float m_guiWidth = 300;
     const float m_guiHeight = (float)m_height;
 
@@ -341,9 +419,9 @@ void Particles::DrawGUI(ID3D12GraphicsCommandList* in_pCommandList)
         numParticlesSimulated = numParticlesRendered;
     }
 
-    ImGui::SliderInt("Rendered", numParticlesRendered, std::min<int>(MIN_NUM_PARTICLES, ParticleCount), ParticleCount);
-    ImGui::SliderInt("Copied", numParticlesCopied, std::min<int>(MIN_NUM_PARTICLES, ParticleCount), ParticleCount);
-    ImGui::SliderInt("Simulated", numParticlesSimulated, std::min<int>(MIN_NUM_PARTICLES, ParticleCount), ParticleCount);
+    ImGui::SliderInt("Rendered", numParticlesRendered, std::min<int>(MIN_NUM_PARTICLES, m_maxNumParticles), m_maxNumParticles);
+    ImGui::SliderInt("Copied", numParticlesCopied, std::min<int>(MIN_NUM_PARTICLES, m_maxNumParticles), m_maxNumParticles);
+    ImGui::SliderInt("Simulated", numParticlesSimulated, std::min<int>(MIN_NUM_PARTICLES, m_maxNumParticles), m_maxNumParticles);
     ImGui::Checkbox("Link Sliders", &m_numParticlesLinked);
 
     //-----------------------------------------------------
@@ -471,11 +549,9 @@ void Particles::Draw()
             ::SetWindowPos(m_hwnd, HWND_NOTOPMOST, left, top, width, height, SWP_FRAMECHANGED);
         }
 
-        m_pRender = new Render(m_hwnd, ParticleCount, m_adapters[m_renderAdapterIndex], m_commandQueueExtensionEnabled, m_fullScreen, m_windowInfo.rcClient);
+        m_pRender = new Render(m_hwnd, m_maxNumParticles, m_adapters[m_renderAdapterIndex], m_commandQueueExtensionEnabled, m_fullScreen, m_windowInfo.rcClient);
 
-#if IMGUI_ENABLED
         InitGui();
-#endif
 
         ShareHandles();
     }
@@ -483,7 +559,7 @@ void Particles::Draw()
     if (prevComputeAdapterIndex != m_computeAdapterIndex)
     {
         Compute* pOldCompute = m_pCompute;
-        m_pCompute = new Compute(ParticleCount, m_adapters[m_computeAdapterIndex],
+        m_pCompute = new Compute(m_maxNumParticles, m_adapters[m_computeAdapterIndex],
             m_commandQueueExtensionEnabled, pOldCompute);
         delete pOldCompute;
 
