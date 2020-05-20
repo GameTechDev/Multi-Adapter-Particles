@@ -297,6 +297,8 @@ void Particles::ParseCommandLine()
     argParser.AddArg(L"noext", [=](std::wstring) { m_enableExtensions = false; });
     argParser.AddArg(L"size", [=](std::wstring s) { m_particleSize = std::stof(s); });
     argParser.AddArg(L"intensity", [=](std::wstring s) { m_particleIntensity = std::stof(s); });
+    argParser.AddArg(L"novsync", [=](std::wstring) { m_vsyncEnabled = false; });
+    argParser.AddArg(L"fullscreen", [=](std::wstring) { m_fullScreen = true; });
     argParser.Parse();
 }
 
