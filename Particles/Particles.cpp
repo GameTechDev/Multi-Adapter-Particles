@@ -223,6 +223,12 @@ Particles::Particles(HWND in_hwnd)
         InitGui();
     }
 
+    // initial state for UI toggles
+    m_prevRenderAdapterIndex = m_renderAdapterIndex;
+    m_prevComputeAdapterIndex = m_computeAdapterIndex;
+    m_prevQueueExtension = m_commandQueueExtensionEnabled;
+    m_prevFullScreen = m_fullScreen;
+
     // start frame duration timer
     m_frameTimer.Start();
     m_previousFrameTime = (float)m_frameTimer.GetTime();
@@ -467,11 +473,6 @@ void Particles::Draw()
     m_pRender->SetParticleSize(m_particleSize);
     m_pRender->SetParticleIntensity(m_particleIntensity);
 
-    const int prevRenderAdapterIndex = m_renderAdapterIndex;
-    const int prevComputeAdapterIndex = m_computeAdapterIndex;
-    const bool prevQueueExtension = m_commandQueueExtensionEnabled;
-    const bool prevFullScreen = m_fullScreen;
-
     if (m_numParticlesLinked)
     {
         m_numParticlesCopied = m_numParticlesRendered;
@@ -494,10 +495,10 @@ void Particles::Draw()
     // if anything changed that might result in an adapter being removed,
     // drain all the pipelines
     if (
-        (prevRenderAdapterIndex != m_renderAdapterIndex)
-        || (prevComputeAdapterIndex != m_computeAdapterIndex)
-        || (prevQueueExtension != m_commandQueueExtensionEnabled)
-        || (prevFullScreen != m_fullScreen)
+        (m_prevRenderAdapterIndex != m_renderAdapterIndex)
+        || (m_prevComputeAdapterIndex != m_computeAdapterIndex)
+        || (m_prevQueueExtension != m_commandQueueExtensionEnabled)
+        || (m_prevFullScreen != m_fullScreen)
         )
     {
         m_pRender->WaitForGpu();
@@ -518,7 +519,7 @@ void Particles::Draw()
     //-----------------------------------------------------
 
     // switching from windowed to full screen? remember window state
-    if (m_fullScreen && !prevFullScreen)
+    if (m_fullScreen && !m_prevFullScreen)
     {
         assert(m_windowInfo.cbSize == sizeof(WINDOWINFO));
         const BOOL rv = ::GetWindowInfo(m_hwnd, &m_windowInfo);
@@ -530,18 +531,17 @@ void Particles::Draw()
     // added some extra logic to check if the render doesn't support the extension, because reset of full-screen is annoying
     if (
         // new adapter? need to create new Render
-        (prevRenderAdapterIndex != m_renderAdapterIndex)
+        (m_prevRenderAdapterIndex != m_renderAdapterIndex)
         // change to/from full screen? need to create new Render
-        || (prevFullScreen != m_fullScreen)
+        || (m_prevFullScreen != m_fullScreen)
         // change of queue extension state on renderer that supports it? need to create new Render
-        // otherwise we encounter problems with the swap chain and destruction of resources
-        || ((prevQueueExtension != m_commandQueueExtensionEnabled) && (m_pRender->GetSupportsIntelCommandQueueExtension()))
+        || ((m_prevQueueExtension != m_commandQueueExtensionEnabled) && (m_pRender->GetSupportsIntelCommandQueueExtension()))
         )
     {
         delete m_pRender;
 
         // for windowed mode, reset the window style and position before creating new Render
-        if (prevFullScreen && !m_fullScreen)
+        if (m_prevFullScreen && !m_fullScreen)
         {
             const UINT width = m_windowInfo.rcWindow.right - m_windowInfo.rcWindow.left;
             const UINT height = m_windowInfo.rcWindow.bottom - m_windowInfo.rcWindow.top;
@@ -559,7 +559,8 @@ void Particles::Draw()
         ShareHandles();
     }
 
-    if (prevComputeAdapterIndex != m_computeAdapterIndex)
+    // new compute device?
+    if (m_prevComputeAdapterIndex != m_computeAdapterIndex)
     {
         Compute* pOldCompute = m_pCompute;
         m_pCompute = new Compute(m_maxNumParticles, m_adapters[m_computeAdapterIndex],
@@ -573,10 +574,16 @@ void Particles::Draw()
 
     // note: we can release() and create a new compute queue with/without extensions with no issues
     // render queue, we can't because of the tight relationship with the swap chain.
-    if (prevQueueExtension != m_commandQueueExtensionEnabled)
+    if (m_prevQueueExtension != m_commandQueueExtensionEnabled)
     {
         m_pCompute->SetUseIntelCommandQueueExtension(m_commandQueueExtensionEnabled);
         m_commandQueueExtensionEnabled = m_pCompute->GetUsingIntelCommandQueueExtension() ||
             m_pRender->GetUsingIntelCommandQueueExtension();
     }
+
+    // reset UI toggle history
+    m_prevRenderAdapterIndex = m_renderAdapterIndex;
+    m_prevComputeAdapterIndex = m_computeAdapterIndex;
+    m_prevQueueExtension = m_commandQueueExtensionEnabled;
+    m_prevFullScreen = m_fullScreen;
 }

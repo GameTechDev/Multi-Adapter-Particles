@@ -105,4 +105,10 @@ private:
     bool m_enableUI;
     bool m_enableExtensions;
     void ParseCommandLine();
+
+    // UI toggle history
+    int m_prevRenderAdapterIndex;
+    int m_prevComputeAdapterIndex;
+    bool m_prevQueueExtension;
+    bool m_prevFullScreen;
 };
