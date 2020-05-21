@@ -52,9 +52,6 @@ public:
     // return if this adapter is using the intel command queue throttle extension
     bool GetUsingIntelCommandQueueExtension() const { return m_usingIntelCommandQueueExtension; }
 
-    // changes extension setting only if different from current setting
-    virtual void SetUseIntelCommandQueueExtension(bool in_desiredSetting) = 0;
-
     // stalls until adapter is idle
     virtual void WaitForGpu() = 0;
 

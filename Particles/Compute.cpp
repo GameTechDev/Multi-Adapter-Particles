@@ -97,17 +97,10 @@ void Compute::CreateCommandQueue()
 //-----------------------------------------------------------------------------
 void Compute::SetUseIntelCommandQueueExtension(bool in_desiredSetting)
 {
+    WaitForGpu();
     in_desiredSetting = in_desiredSetting && m_pExtensionHelper->GetEnabled();
     if (m_usingIntelCommandQueueExtension != in_desiredSetting)
     {
-        // need additional cleanup when switching from using extension to not using it
-        if (m_usingIntelCommandQueueExtension)
-        {
-            // INTC extension seems to internally increase ref count.
-            // Can't use ComPtr<T>::Reset() here!
-            m_commandQueue->Release();
-        }
-
         m_usingIntelCommandQueueExtension = in_desiredSetting;
         CreateCommandQueue();
     }

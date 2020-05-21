@@ -530,11 +530,12 @@ void Particles::Draw()
     // added some extra logic to check if the render doesn't support the extension, because reset of full-screen is annoying
     if (
         // new adapter? need to create new Render
-        (prevRenderAdapterIndex != m_renderAdapterIndex) ||
+        (prevRenderAdapterIndex != m_renderAdapterIndex)
         // change to/from full screen? need to create new Render
-        (prevFullScreen != m_fullScreen) ||
+        || (prevFullScreen != m_fullScreen)
         // change of queue extension state on renderer that supports it? need to create new Render
-        ((prevQueueExtension != m_commandQueueExtensionEnabled) && (m_pRender->GetSupportsIntelCommandQueueExtension()))
+        // otherwise we encounter problems with the swap chain and destruction of resources
+        || ((prevQueueExtension != m_commandQueueExtensionEnabled) && (m_pRender->GetSupportsIntelCommandQueueExtension()))
         )
     {
         delete m_pRender;
@@ -570,6 +571,8 @@ void Particles::Draw()
         m_commandQueueExtensionEnabled = m_pCompute->GetUsingIntelCommandQueueExtension();
     }
 
+    // note: we can release() and create a new compute queue with/without extensions with no issues
+    // render queue, we can't because of the tight relationship with the swap chain.
     if (prevQueueExtension != m_commandQueueExtensionEnabled)
     {
         m_pCompute->SetUseIntelCommandQueueExtension(m_commandQueueExtensionEnabled);
