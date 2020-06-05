@@ -140,17 +140,17 @@ Particles::Particles(HWND in_hwnd)
     , m_enableUI(true)
     , m_enableExtensions(true)
 {
-    ParseCommandLine();
     m_numParticlesRendered = m_maxNumParticles;
     m_numParticlesCopied = m_maxNumParticles;
     m_numParticlesSimulated = m_maxNumParticles;
+    ParseCommandLine();
 
     m_windowInfo.cbSize = sizeof(WINDOWINFO);
     const BOOL rv = ::GetWindowInfo(m_hwnd, &m_windowInfo);
     assert(rv);
 
     InitDebugLayer();
-    
+
     UINT flags = 0;
 #ifdef _DEBUG
     flags |= DXGI_CREATE_FACTORY_DEBUG;
@@ -298,13 +298,24 @@ private:
 void Particles::ParseCommandLine()
 {
     ArgParser argParser;
-    argParser.AddArg(L"numparticles", [=](std::wstring s) { m_maxNumParticles = std::stoi(s); });
+    argParser.AddArg(L"numparticles", [=](std::wstring s) {
+        m_maxNumParticles = std::stoi(s);
+        m_numParticlesRendered = m_maxNumParticles;
+        m_numParticlesCopied = m_maxNumParticles;
+        m_numParticlesSimulated = m_maxNumParticles;
+    });
+
     argParser.AddArg(L"nogui", [=](std::wstring) { m_enableUI = false; });
     argParser.AddArg(L"noext", [=](std::wstring) { m_enableExtensions = false; });
     argParser.AddArg(L"size", [=](std::wstring s) { m_particleSize = std::stof(s); });
     argParser.AddArg(L"intensity", [=](std::wstring s) { m_particleIntensity = std::stof(s); });
     argParser.AddArg(L"novsync", [=](std::wstring) { m_vsyncEnabled = false; });
     argParser.AddArg(L"fullscreen", [=](std::wstring) { m_fullScreen = true; });
+
+    argParser.AddArg(L"numCopy", [=](std::wstring s) { m_numParticlesCopied = std::stoi(s); m_numParticlesLinked = false; });
+    argParser.AddArg(L"numDraw", [=](std::wstring s) { m_numParticlesRendered = std::stoi(s); m_numParticlesLinked = false; });
+    argParser.AddArg(L"numSim", [=](std::wstring s) { m_numParticlesSimulated = std::stoi(s); m_numParticlesLinked = false; });
+
     argParser.Parse();
 }
 
@@ -320,7 +331,7 @@ void Particles::InitGui()
         return;
     }
     m_srvHeap.Reset();
-    
+
     ID3D12Device* pDevice = m_pRender->GetDevice();
 
     // Describe and create a shader resource view (SRV) heap for the texture.
@@ -332,7 +343,7 @@ void Particles::InitGui()
 
     CD3DX12_CPU_DESCRIPTOR_HANDLE cpu(m_srvHeap->GetCPUDescriptorHandleForHeapStart());
     CD3DX12_GPU_DESCRIPTOR_HANDLE gpu(m_srvHeap->GetGPUDescriptorHandleForHeapStart());
-    
+
     ImGui_ImplDX12_Shutdown();
     ImGui_ImplDX12_Init(
         pDevice,
