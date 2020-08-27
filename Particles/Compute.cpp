@@ -68,11 +68,6 @@ enum class GpuTimers
 };
 
 //-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-// FIXME: shared functions go in a header?
-extern std::wstring GetAssetFullPath(const wchar_t* const in_filename);
-
-//-----------------------------------------------------------------------------
 // creates a command queue with the intel extension if available
 //-----------------------------------------------------------------------------
 void Compute::CreateCommandQueue()
@@ -203,7 +198,7 @@ void Compute::CreateSharedBuffers()
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 Compute::Compute(UINT in_numParticles,
-    ComPtr<IDXGIAdapter1> in_adapter,
+    IDXGIAdapter1* in_pAdapter,
     bool in_useIntelCommandQueueExtension,
     Compute* in_pCompute)
     : m_numParticles(in_numParticles)
@@ -216,7 +211,7 @@ Compute::Compute(UINT in_numParticles,
 {
     m_usingIntelCommandQueueExtension = in_useIntelCommandQueueExtension;
 
-    Initialize(in_adapter);
+    Initialize(in_pAdapter);
 
     if (in_pCompute)
     {
@@ -364,12 +359,13 @@ void Compute::CopyState(Compute* in_pCompute)
 
 //-----------------------------------------------------------------------------
 // called to dynamically change the compute adapter
-//-----------------------------------------------------------------------------
-void Compute::SetAdapter(ComPtr<IDXGIAdapter1> in_adapter)
-{
-    m_adapter = in_adapter;
 
-    CreateDevice(m_adapter.Get(), m_device);
+//-----------------------------------------------------------------------------
+// create root sig, pipeline state, descriptor heap, srv uav cbv
+//-----------------------------------------------------------------------------
+void Compute::Initialize(IDXGIAdapter1* in_pAdapter)
+{
+    CreateDevice(in_pAdapter, m_device);
 
     m_pExtensionHelper = new ExtensionHelper(m_device.Get());
     m_usingIntelCommandQueueExtension = m_usingIntelCommandQueueExtension && m_pExtensionHelper->GetEnabled();
@@ -399,14 +395,6 @@ void Compute::SetAdapter(ComPtr<IDXGIAdapter1> in_adapter)
     // create timer on the command queue
     m_pTimer = new D3D12GpuTimer(m_device.Get(), m_commandQueue.Get(), static_cast<UINT>(GpuTimers::NumTimers));
     m_pTimer->SetTimerName(static_cast<UINT>(GpuTimers::Simulate), "simulate ms");
-}
-
-//-----------------------------------------------------------------------------
-// create root sig, pipeline state, descriptor heap, srv uav cbv
-//-----------------------------------------------------------------------------
-void Compute::Initialize(ComPtr<IDXGIAdapter1> in_adapter)
-{
-    SetAdapter(in_adapter);
 
     m_srvUavDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
@@ -533,9 +521,6 @@ void Compute::Initialize(ComPtr<IDXGIAdapter1> in_adapter)
 
     CreateSharedBuffers();
 }
-
-
-
 
 #define USE_ORIG 1
 #define USE_SCALAR_OPTIMIZED 0

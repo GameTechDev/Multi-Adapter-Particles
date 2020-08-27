@@ -73,11 +73,8 @@ private:
     std::vector<const char*> m_adapterDescriptionPtrs;
 
     std::uint32_t m_height;
-
-    Timer m_frameTimer;
-    float m_previousFrameTime;
-    float m_frameTime;
-
+    TimerAverageOver m_frameTimer;
+ 
     enum RootParameters : UINT32
     {
         //RootCBV = 0,

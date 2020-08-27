@@ -74,6 +74,9 @@
     <ClInclude Include="AdapterShared.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\ArgParser.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CopyFileToFolders Include="ParticleDraw.hlsl">

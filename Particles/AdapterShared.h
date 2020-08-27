@@ -31,6 +31,7 @@
 #include <dxgi1_6.h>
 #include <d3d12.h>
 #include <wrl.h>
+#include <sstream>
 
 #include "D3D12GpuTimer.h"
 
@@ -61,6 +62,8 @@ public:
 protected:
     // create a device with the highest feature support
     void CreateDevice(IDXGIAdapter1* in_pAdapter, ComPtr<ID3D12Device>& in_device);
+
+    std::wstring GetAssetFullPath(const wchar_t* const in_filename);
 
     D3D12GpuTimer* m_pTimer;
     bool m_usingIntelCommandQueueExtension;
@@ -97,3 +100,15 @@ inline void AdapterShared::CreateDevice(IDXGIAdapter1* in_pAdapter, ComPtr<ID3D1
     m_isUMA = SUCCEEDED(hr) && featureData.UMA;
 }
 
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+inline std::wstring AdapterShared::GetAssetFullPath(const wchar_t* const in_filename)
+{
+    constexpr size_t PATHBUFFERSIZE = MAX_PATH * 4;
+    TCHAR buffer[PATHBUFFERSIZE];
+    ::GetCurrentDirectory(_countof(buffer), buffer);
+
+    std::wostringstream assetFullPath;
+    assetFullPath << buffer << L"\\\\" << in_filename;
+    return assetFullPath.str();
+}

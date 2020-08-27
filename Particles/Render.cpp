@@ -26,7 +26,6 @@
 
 #include <cassert>
 #include <string>
-#include <sstream>
 #include <D3Dcompiler.h>
 
 #include "Render.h"
@@ -92,19 +91,6 @@ bool Render::GetSupportsIntelCommandQueueExtension() const
     return m_pExtensionHelper->GetEnabled();
 }
 
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-std::wstring GetAssetFullPath(const wchar_t* const in_filename)
-{
-    constexpr size_t PATHBUFFERSIZE = MAX_PATH * 4;
-    TCHAR buffer[PATHBUFFERSIZE];
-    ::GetCurrentDirectory(_countof(buffer), buffer);
-
-    std::wostringstream assetFullPath;
-    assetFullPath << buffer << L"\\\\" << in_filename;
-    return assetFullPath.str();
-}
-
 // Indices of shader resources in the descriptor heap.
 enum DescriptorHeapIndex : UINT32
 {
@@ -120,43 +106,15 @@ enum class GpuTimers
 };
 
 //-----------------------------------------------------------------------------
-// creates a command queue with the intel extension if available
-//-----------------------------------------------------------------------------
-void Render::CreateCommandQueue()
-{
-    D3D12_COMMAND_QUEUE_DESC desc = {};
-    desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-    desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-
-    if (m_usingIntelCommandQueueExtension)
-    {
-        m_commandQueue = m_pExtensionHelper->CreateCommandQueue(desc);
-        desc.Type = D3D12_COMMAND_LIST_TYPE_COPY;
-        m_copyQueue = m_pExtensionHelper->CreateCommandQueue(desc);
-    }
-    else
-    {
-        ThrowIfFailed(m_device->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_commandQueue)));
-        desc.Type = D3D12_COMMAND_LIST_TYPE_COPY;
-        ThrowIfFailed(m_device->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_copyQueue)));
-    }
-
-    m_commandQueue->SetName(L"Render Queue");
-    m_copyQueue->SetName(L"Copy Queue");
-
-    CreateSwapChain();
-}
-
-//-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 Render::Render(HWND in_hwnd, UINT in_numParticles,
-    ComPtr<IDXGIAdapter1> in_adapter,
+    IDXGIAdapter1* in_pAdapter,
     bool in_useIntelCommandQueueExtension,
     bool in_fullScreen, RECT in_windowDim)
-    : m_numParticles(in_numParticles)
+    : m_adapter(in_pAdapter)
+    ,m_numParticles(in_numParticles)
     , m_pExtensionHelper(nullptr)
     , m_hwnd(in_hwnd)
-    , m_adapter(in_adapter)
     , m_frameIndex(0)
     , m_swapChainEvent(nullptr)
     , m_frameFenceValues{}
@@ -180,7 +138,7 @@ Render::Render(HWND in_hwnd, UINT in_numParticles,
     m_camera.Init({ 0.0f, 0.0f, 1500.0f });
     m_camera.SetMoveSpeed(250.0f);
 
-    CreateDevice(in_adapter.Get(), m_device);
+    CreateDevice(in_pAdapter, m_device);
 
     // attempt to enable Intel extensions
     m_pExtensionHelper = new ExtensionHelper(m_device.Get());
@@ -208,8 +166,7 @@ Render::~Render()
 
     if (m_pConstantBufferGSData)
     {
-        const CD3DX12_RANGE readRange(0, 0);
-        m_constantBufferGS->Unmap(0, &readRange);
+        m_constantBufferGS->Unmap(0, nullptr);
         m_pConstantBufferGSData = 0;
     }
 
@@ -228,6 +185,34 @@ Render::~Render()
     assert(rv != FALSE);
 
     delete m_pExtensionHelper;
+}
+
+//-----------------------------------------------------------------------------
+// creates a command queue with the intel extension if available
+//-----------------------------------------------------------------------------
+void Render::CreateCommandQueue()
+{
+    D3D12_COMMAND_QUEUE_DESC desc = {};
+    desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+    desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+
+    if (m_usingIntelCommandQueueExtension)
+    {
+        m_commandQueue = m_pExtensionHelper->CreateCommandQueue(desc);
+        desc.Type = D3D12_COMMAND_LIST_TYPE_COPY;
+        m_copyQueue = m_pExtensionHelper->CreateCommandQueue(desc);
+    }
+    else
+    {
+        ThrowIfFailed(m_device->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_commandQueue)));
+        desc.Type = D3D12_COMMAND_LIST_TYPE_COPY;
+        ThrowIfFailed(m_device->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_copyQueue)));
+    }
+
+    m_commandQueue->SetName(L"Render Queue");
+    m_copyQueue->SetName(L"Copy Queue");
+
+    CreateSwapChain();
 }
 
 //-----------------------------------------------------------------------------

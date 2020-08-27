@@ -34,7 +34,7 @@ class Compute : public AdapterShared
 {
 public:
     Compute(UINT in_numParticles,
-        ComPtr<IDXGIAdapter1> in_adapter,
+        IDXGIAdapter1* in_pAdapter,
         bool in_useIntelCommandQueueExtension,
         Compute* in_pCompute = 0);
     virtual ~Compute();
@@ -79,7 +79,6 @@ private:
 
     ExtensionHelper* m_pExtensionHelper;
 
-    ComPtr<IDXGIAdapter1> m_adapter;
     ComPtr<ID3D12Device> m_device;
 
     // compute command queue
@@ -104,8 +103,7 @@ private:
     ComPtr<ID3D12Resource> m_positionBuffers[m_NUM_BUFFERS];
     SharedHandles m_sharedHandles;
 
-    void Initialize(ComPtr<IDXGIAdapter1>);
-    void SetAdapter(ComPtr<IDXGIAdapter1>);
+    void Initialize(IDXGIAdapter1* in_pAdapter);
     void CreateCommandQueue();
     void CreateSharedBuffers();
 

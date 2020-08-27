@@ -72,3 +72,65 @@ inline double Timer::GetTime() const
     const LONGLONG e = endTime.QuadPart;
     return double(e-s) * m_oneOverTicksPerSecond;
 }
+
+/*======================================================
+Usage:
+Either: call once every loop with Update(), e.g. for average frametime
+Or: call in pairs Start()...Update() to average a region
+======================================================*/
+class TimerAverageOver
+{
+public:
+    TimerAverageOver(UINT in_numFrames = 30, UINT in_everyN = 1) :
+        m_averageIndex(0), m_sum(0), m_skipEvery(in_everyN)
+    {
+        m_values.resize(in_numFrames, 0);
+        m_timer.Start();
+        m_previousTime = 0;
+    }
+
+    void Start()
+    {
+        // assert no skipping. doesn't make sense for this usage
+        m_skipEvery = 1;
+        m_previousTime = (float)m_timer.GetTime();
+    }
+
+    void Update()
+    {
+        m_skipCount++;
+        if (m_skipEvery == m_skipCount)
+        {
+            m_skipCount = 0;
+
+            float t = (float)m_timer.GetTime();
+            float delta = t - m_previousTime;
+            m_previousTime = t;
+
+            m_averageIndex = (m_averageIndex + 1) % m_values.size();
+            m_sum -= m_values[m_averageIndex];
+            m_sum += delta;
+            m_values[m_averageIndex] = delta;
+        }
+    }
+
+    float Get()
+    {
+        return (m_sum / (float(m_values.size()) * m_skipEvery));
+    }
+private:
+    TimerAverageOver(const TimerAverageOver&) = delete;
+    TimerAverageOver(TimerAverageOver&&) = delete;
+    TimerAverageOver& operator=(const TimerAverageOver&) = delete;
+    TimerAverageOver& operator=(TimerAverageOver&&) = delete;
+
+    Timer m_timer;
+    UINT m_averageIndex;
+    float m_sum;
+    std::vector<float> m_values;
+
+    UINT m_skipEvery;
+    UINT m_skipCount;
+
+    float m_previousTime;
+};
