@@ -68,6 +68,61 @@ enum class GpuTimers
 };
 
 //-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+Compute::Compute(UINT in_numParticles,
+    IDXGIAdapter1* in_pAdapter,
+    bool in_useIntelCommandQueueExtension,
+    Compute* in_pCompute)
+    : m_numParticles(in_numParticles)
+    , m_pExtensionHelper(nullptr)
+    , m_srvUavDescriptorSize(0)
+    , m_fenceEvent(nullptr)
+    , m_bufferIndex(0)
+    , m_frameFenceValues{}
+    , m_fenceValue(0)
+{
+    m_usingIntelCommandQueueExtension = in_useIntelCommandQueueExtension;
+
+    Initialize(in_pAdapter);
+
+    if (in_pCompute)
+    {
+        CopyState(in_pCompute);
+    }
+    else
+    {
+        InitializeParticles();
+    }
+
+    WaitForGpu();
+}
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+Compute::~Compute()
+{
+    WaitForGpu();
+
+    delete m_pExtensionHelper;
+
+    if (m_usingIntelCommandQueueExtension)
+    {
+        // INTC extension seems to internally increase ref count.
+        // Can't use ComPtr<T>::Reset() here!
+        m_commandQueue->Release();
+    }
+
+    BOOL rv = ::CloseHandle(m_sharedHandles.m_heap);
+    assert(rv != FALSE);
+
+    rv = ::CloseHandle(m_sharedHandles.m_fence);
+    assert(rv != FALSE);
+
+    rv = ::CloseHandle(m_fenceEvent);
+    assert(rv != FALSE);
+}
+
+//-----------------------------------------------------------------------------
 // creates a command queue with the intel extension if available
 //-----------------------------------------------------------------------------
 void Compute::CreateCommandQueue()
@@ -196,58 +251,50 @@ void Compute::CreateSharedBuffers()
 }
 
 //-----------------------------------------------------------------------------
+// when we create a compute device for async compute, we compute directly into
+// the buffers used for rendering and abandon our reference to the shared resources.
+// if a new compute device is created that is not async compute, we need to
+// copy the current particle positions into the old shared buffers before we
+// copy the data into the new compute object.
 //-----------------------------------------------------------------------------
-Compute::Compute(UINT in_numParticles,
-    IDXGIAdapter1* in_pAdapter,
-    bool in_useIntelCommandQueueExtension,
-    Compute* in_pCompute)
-    : m_numParticles(in_numParticles)
-    , m_pExtensionHelper(nullptr)
-    , m_srvUavDescriptorSize(0)
-    , m_fenceEvent(nullptr)
-    , m_bufferIndex(0)
-    , m_frameFenceValues{}
-    , m_fenceValue(0)
+void Compute::ResetFromAsyncHelper()
 {
-    m_usingIntelCommandQueueExtension = in_useIntelCommandQueueExtension;
-
-    Initialize(in_pAdapter);
-
-    if (in_pCompute)
+    // if the reference copy made for async matches my current reference,
+    // then we are not running in async mode and no copy is necessary.
+    if (m_positionBuffers[0] == m_sharedComputeBuffersReference[0])
     {
-        CopyState(in_pCompute);
+        return;
     }
-    else
+
+    ThrowIfFailed(m_commandAllocators[m_bufferIndex]->Reset());
+    ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
+
+    for (UINT i = 0; i < m_NUM_BUFFERS; i++)
     {
-        InitializeParticles();
+        auto src = m_positionBuffers[i].Get();
+        auto dst = m_sharedComputeBuffersReference[i].Get();
+
+        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(src, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
+        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(dst, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST));
+
+        m_commandList->CopyBufferRegion(
+            dst, 0,
+            src, 0,
+            m_numParticles * sizeof(Render::Particle));
+
+        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(src, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(dst, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
     }
+
+    ThrowIfFailed(m_commandList->Close());
+
+    ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
+    m_commandQueue->ExecuteCommandLists(1, ppCommandLists);
 
     WaitForGpu();
-}
 
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-Compute::~Compute()
-{
-    WaitForGpu();
-
-    delete m_pExtensionHelper;
-
-    if (m_usingIntelCommandQueueExtension)
-    {
-        // INTC extension seems to internally increase ref count.
-        // Can't use ComPtr<T>::Reset() here!
-        m_commandQueue->Release();
-    }
-
-    BOOL rv = ::CloseHandle(m_sharedHandles.m_heap);
-    assert(rv != FALSE);
-
-    rv = ::CloseHandle(m_sharedHandles.m_fence);
-    assert(rv != FALSE);
-
-    rv = ::CloseHandle(m_fenceEvent);
-    assert(rv != FALSE);
+    // reset the old references
+    SetAsync(m_sharedRenderFence, m_sharedComputeBuffersReference, m_bufferIndex);
 }
 
 //-----------------------------------------------------------------------------
@@ -255,6 +302,8 @@ Compute::~Compute()
 //-----------------------------------------------------------------------------
 void Compute::CopyState(Compute* in_pCompute)
 {
+    in_pCompute->ResetFromAsyncHelper();
+
     //---------------------------------------------------------------
     // open shared buffers
     //---------------------------------------------------------------
@@ -332,6 +381,9 @@ void Compute::CopyState(Compute* in_pCompute)
         in_pCompute->WaitForGpu();
     }
 
+    //---------------------------------------------------------------
+    // now copy the velocity data from the other compute device
+    //---------------------------------------------------------------
     {
         ThrowIfFailed(m_commandAllocators[m_bufferIndex]->Reset());
         ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_bufferIndex].Get(), m_computeState.Get()));
@@ -356,9 +408,6 @@ void Compute::CopyState(Compute* in_pCompute)
 
     WaitForGpu();
 }
-
-//-----------------------------------------------------------------------------
-// called to dynamically change the compute adapter
 
 //-----------------------------------------------------------------------------
 // create root sig, pipeline state, descriptor heap, srv uav cbv
@@ -520,6 +569,13 @@ void Compute::Initialize(IDXGIAdapter1* in_pAdapter)
     ThrowIfFailed(m_device->CreateDescriptorHeap(&srvUavHeapDesc, IID_PPV_ARGS(&m_srvHeap)));
 
     CreateSharedBuffers();
+
+    // shenanigans to simplify transitioning /out/ of async compute mode:
+    // keep a 2nd reference to these shared resources so we can copy stuff through them to a new compute object
+    for (UINT i = 0; i < m_NUM_BUFFERS; i++)
+    {
+        m_sharedComputeBuffersReference[i] = m_positionBuffers[i];
+    }
 }
 
 #define USE_ORIG 1
@@ -887,10 +943,47 @@ void Compute::WaitForGpu()
 //-----------------------------------------------------------------------------
 const Compute::SharedHandles& Compute::GetSharedHandles(HANDLE in_fenceHandle)
 {
-    ThrowIfFailed(m_device->OpenSharedHandle(in_fenceHandle, IID_PPV_ARGS(&m_sharedFence)));
+    ThrowIfFailed(m_device->OpenSharedHandle(in_fenceHandle, IID_PPV_ARGS(&m_sharedRenderFence)));
 
     m_sharedHandles.m_bufferIndex = m_bufferIndex;
     return m_sharedHandles;
+}
+
+//-----------------------------------------------------------------------------
+// async does things differently
+// release shared, placed resources and replace with render device resources.
+//-----------------------------------------------------------------------------
+void Compute::SetAsync(
+    ComPtr<ID3D12Fence> in_fence,
+    ComPtr<ID3D12Resource>* in_buffers,
+    UINT in_bufferIndex)
+{
+    m_sharedRenderFence = in_fence;
+    m_bufferIndex = 1-in_bufferIndex;
+
+    D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+    uavDesc.Format = DXGI_FORMAT_UNKNOWN;
+    uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+    uavDesc.Buffer.FirstElement = 0;
+    uavDesc.Buffer.NumElements = m_numParticles;
+    uavDesc.Buffer.StructureByteStride = sizeof(Render::Particle);
+    uavDesc.Buffer.CounterOffsetInBytes = 0;
+    uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+
+    for (UINT i = 0; i < m_NUM_BUFFERS; i++)
+    {
+        // replace "my" shared resources with the resources from the render adapter
+        m_positionBuffers[i] = in_buffers[i];
+
+        const CD3DX12_CPU_DESCRIPTOR_HANDLE heapHandle(
+            m_srvHeap->GetCPUDescriptorHandleForHeapStart(),
+            UavParticlePos0 + i,
+            m_srvUavDescriptorSize);
+        m_device->CreateUnorderedAccessView(m_positionBuffers[i].Get(), nullptr, &uavDesc, heapHandle);
+    }
+    // setting heap[2] = heap[0]
+    const CD3DX12_CPU_DESCRIPTOR_HANDLE copyPosHandle(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), UavParticlePos0Copy, m_srvUavDescriptorSize);
+    m_device->CreateUnorderedAccessView(m_positionBuffers[0].Get(), nullptr, &uavDesc, copyPosHandle);
 }
 
 //-----------------------------------------------------------------------------
@@ -916,7 +1009,7 @@ void Compute::MoveToNextFrame()
 void Compute::Simulate(int in_numActiveParticles, UINT64 in_sharedFenceValue)
 {
     // /previous/ copy must complete before overwriting the old state
-    ThrowIfFailed(m_commandQueue->Wait(m_sharedFence.Get(), in_sharedFenceValue-1));
+    ThrowIfFailed(m_commandQueue->Wait(m_sharedRenderFence.Get(), in_sharedFenceValue-1));
 
     const UINT oldIndex = m_bufferIndex; // 0 or 1. Old corresponds to the surface the render device is currently using
     const UINT newIndex = 1 - oldIndex;  // 1 or 0. New corresponds to the surface the render device is NOT using

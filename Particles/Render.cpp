@@ -134,6 +134,7 @@ Render::Render(HWND in_hwnd, UINT in_numParticles,
     , m_sharedFenceHandle(nullptr)
     , m_particleSize(0.f)
     , m_particleIntensity(0.f)
+    , m_asyncMode(false)
 {
     m_camera.Init({ 0.0f, 0.0f, 1500.0f });
     m_camera.SetMoveSpeed(250.0f);
@@ -262,7 +263,11 @@ void Render::SetShared(const Compute::SharedHandles& in_sharedHandles)
 
         for (UINT i = 0; i < m_NUM_BUFFERS; i++)
         {
-            m_commandList->CopyBufferRegion(pDstResource[i].Get(), 0, pSrcResource[i].Get(), 0, m_bufferSize);
+            D3D12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(pDstResource[i].Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+            m_commandList->ResourceBarrier(1, &barrier);
+            m_commandList->CopyBufferRegion(barrier.Transition.pResource, 0, pSrcResource[i].Get(), 0, m_bufferSize);
+            std::swap(barrier.Transition.StateBefore, barrier.Transition.StateAfter);
+            m_commandList->ResourceBarrier(1, &barrier);
         }
 
         ThrowIfFailed(m_commandList->Close());
@@ -737,8 +742,9 @@ void Render::CreateParticleBuffers()
         ThrowIfFailed(m_device->CreateCommittedResource(
             &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
             D3D12_HEAP_FLAG_NONE,
-            &CD3DX12_RESOURCE_DESC::Buffer(m_bufferSize, D3D12_RESOURCE_FLAG_NONE),
-            D3D12_RESOURCE_STATE_COPY_DEST,
+            // in async compute mode, this resource is accessed as a UAV
+            &CD3DX12_RESOURCE_DESC::Buffer(m_bufferSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
+            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
             nullptr,
             IID_PPV_ARGS(&m_buffers[i])));
 #ifdef _DEBUG
@@ -835,8 +841,15 @@ HANDLE Render::Draw(int in_numActiveParticles, Particles* in_pParticles, UINT64&
 {
     UpdateCamera();
 
-    // start copy for next frame. no reason to delay.
-    CopySimulationResults(inout_fenceValue, in_numParticlesCopied);
+    if (!m_asyncMode)
+    {
+        // start copy for next frame. no reason to delay.
+        CopySimulationResults(inout_fenceValue, in_numParticlesCopied);
+    }
+    else
+    {
+        ThrowIfFailed(m_commandQueue->Wait(m_sharedComputeFence.Get(), inout_fenceValue-1));
+    }
 
     ThrowIfFailed(m_commandAllocators[m_frameIndex]->Reset());
     ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_frameIndex].Get(), m_pipelineState.Get()));
@@ -869,25 +882,19 @@ HANDLE Render::Draw(int in_numActiveParticles, Particles* in_pParticles, UINT64&
     // current buffer index refers to the physically local buffer holding particle positions
     // use the current buffer index, then update the current buffer index for the next frame
     const UINT srvIndex = SrvParticlePosVelo0 + m_currentBufferIndex;
-    ID3D12Resource* pResource = m_buffers[m_currentBufferIndex].Get();
     m_currentBufferIndex = 1 - m_currentBufferIndex;
 
     const CD3DX12_GPU_DESCRIPTOR_HANDLE srvHandle(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), srvIndex, m_srvUavDescriptorSize);
     m_commandList->SetGraphicsRootDescriptorTable(GraphicsRootSRVTable, srvHandle);
 
     // draw things
-    {
-        // transition pixel position from/to copy dest
-        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(pResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
-        m_commandList->DrawInstanced(in_numActiveParticles, 1, 0, 0);
-        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(pResource, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST));
+    m_commandList->DrawInstanced(in_numActiveParticles, 1, 0, 0);
 
-        // Draw GUI last
-        in_pParticles->DrawGUI(m_commandList.Get());
+    // Draw GUI last
+    in_pParticles->DrawGUI(m_commandList.Get());
 
-        // Indicate that the back buffer will now be used to present.
-        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
-    }
+    // Indicate that the back buffer will now be used to present.
+    m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
     m_pTimer->EndTimer(m_commandList.Get(), static_cast<std::uint32_t>(GpuTimers::FPS));
     m_pTimer->ResolveAllTimers(m_commandList.Get());
@@ -913,11 +920,19 @@ HANDLE Render::Draw(int in_numActiveParticles, Particles* in_pParticles, UINT64&
     // for host-side sync, we return a handle to the whole multi-adapter pipeline
     // this wait(), by virtue of copy sync with compute, this also syncs render and compute
     //-------------------------------------------------------------------------
-    ThrowIfFailed(m_commandQueue->Wait(m_copyFence.Get(), m_copyFenceValue));
+    if (!m_asyncMode)
+    {
+        ThrowIfFailed(m_commandQueue->Wait(m_copyFence.Get(), m_copyFenceValue));
+        inout_fenceValue = m_copyFenceValue;
+    }
+    else
+    {
+        ThrowIfFailed(m_commandQueue->Wait(m_sharedComputeFence.Get(), inout_fenceValue));
+        inout_fenceValue = m_renderFenceValue;
+    }
 
     //-------------------------------------------------------------------------
     // end of frame
     //-------------------------------------------------------------------------
-    inout_fenceValue = m_copyFenceValue;
     return MoveToNextFrame();
 }

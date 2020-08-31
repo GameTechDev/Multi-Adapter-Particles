@@ -68,8 +68,19 @@ public:
     bool GetSupportsIntelCommandQueueExtension() const;
     //-----------------------------------------------------
 
+    //-----------------------------------------------------
+    // for multi-adapter sharing
     HANDLE GetSharedFenceHandle() const { return m_sharedFenceHandle; }
     void SetShared(const Compute::SharedHandles& in_sharedHandles);
+    //-----------------------------------------------------
+
+    //-----------------------------------------------------
+    // for async compute mode
+    ComPtr<ID3D12Fence> GetFence() const { return m_renderFence; }
+    ComPtr<ID3D12Resource>* const GetBuffers() { return m_buffers; }
+    UINT GetBufferIndex() const { return m_currentBufferIndex; }
+    void SetAsyncMode(bool in_enable) { m_asyncMode = in_enable; }
+    //-----------------------------------------------------
 
     struct Particle
     {
@@ -80,6 +91,8 @@ public:
     virtual void WaitForGpu() override;
 
 private:
+    bool m_asyncMode;
+
     static constexpr std::uint32_t NUM_FRAMES = 2;
     const UINT m_numParticles;
 

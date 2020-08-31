@@ -193,9 +193,18 @@ void Particles::ShareHandles()
     assert(m_pRender != nullptr);
     assert(m_pCompute != nullptr);
 
+    m_pCompute->ResetFromAsyncHelper();
+
     const HANDLE renderFenceHandle = m_pRender->GetSharedFenceHandle();
     assert(renderFenceHandle != nullptr);
     m_pRender->SetShared(m_pCompute->GetSharedHandles(renderFenceHandle));
+
+    bool asyncMode = (m_renderAdapterIndex == m_computeAdapterIndex);
+    if (asyncMode)
+    {
+        m_pCompute->SetAsync(m_pRender->GetFence(), m_pRender->GetBuffers(), m_pRender->GetBufferIndex());
+    }
+    m_pRender->SetAsyncMode(asyncMode);
 }
 
 //-----------------------------------------------------------------------------
@@ -344,13 +353,13 @@ void Particles::DrawGUI(ID3D12GraphicsCommandList* in_pCommandList)
 
     if (m_renderAdapterIndex == m_computeAdapterIndex)
     {
-        ImGui::Text("PERFORMANCE ISSUE: Not Multi-Adapter");
+        ImGui::Text("Single Adapter with Async Compute");
     }
     else
     {
         if (m_pCompute->GetIsUMA())
         {
-            ImGui::Text("Good: Compute is UMA");
+            ImGui::Text("Good: Multi-GPU with UMA Compute");
         }
         else
         {

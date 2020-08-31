@@ -71,6 +71,11 @@ public:
     // stalls until adapter is idle
     virtual void WaitForGpu() override;
 
+    void SetAsync(
+        ComPtr<ID3D12Fence> in_fence,
+        ComPtr<ID3D12Resource>* in_buffers,
+        UINT in_bufferIndex);
+    void ResetFromAsyncHelper();
 private:
     static constexpr UINT m_NUM_BUFFERS = 2;
 
@@ -117,7 +122,10 @@ private:
     // sample code waited in this method
     // this version returns a handle, so the calling function can WaitOn/Multiple/
     void MoveToNextFrame();
-    ComPtr<ID3D12Fence> m_sharedFence;
+    ComPtr<ID3D12Fence> m_sharedRenderFence;
 
     void CopyState(Compute* in_pCompute);
+
+    // shenanigans to simplify transitioning /out/ of async compute mode
+    ComPtr<ID3D12Resource> m_sharedComputeBuffersReference[m_NUM_BUFFERS];
 };
